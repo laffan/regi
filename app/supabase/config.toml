@@ -1,0 +1,45 @@
+project_id = "track-a-lack"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[db.pooler]
+enabled = false
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = true
+port = 54324
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173", "trackalack://auth-callback"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+# Off locally so the seeded account can sign in immediately; leave confirmations
+# on in a hosted project.
+enable_confirmations = false
+
+[functions.parse-log]
+verify_jwt = true
+
+[functions.food-lookup]
+verify_jwt = true

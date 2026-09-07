@@ -1,25 +1,87 @@
-# CODING AGENTS: READ THIS FIRST
+# Track-a-Lack
 
-This is a **handoff bundle** from Claude Design (claude.ai/design).
+A habit tracker built out of modules. You turn on the ones you want to track;
+each brings its own tools, its own dashboard widgets, and its own line on the
+calendar. Modules publish named series that other modules and widgets can read,
+and the calendar is the spine everything joins on.
 
-A user mocked up designs in HTML/CSS/JS using an AI design tool, then exported this bundle so a coding agent can implement the designs for real.
+Built from the Claude Design handoff in `project/` and `chats/` — the canvas
+screens (1a–1i, 2a–2b, 3a–3b) and the conversation that produced them.
 
-## What you should do — IMPORTANT
+```
+app/   Supabase — schema, RLS, database functions, edge functions, seed data
+web/   React + Vite + TypeScript
+ios/   SwiftUI, no package dependencies
+```
 
-**Read the chat transcripts first.** There are 1 chat transcript(s) in `chats/`. The transcripts show the full back-and-forth between the user and the design assistant — they tell you **what the user actually wants** and **where they landed** after iterating. Don't skip them. The final HTML files are the output, but the chat is where the intent lives.
+Each has its own README with setup, and they share one model:
 
-**Read `project/Habit Tracker - Modules.dc.html` in full.** The user had this file open when they triggered the handoff, so it's almost certainly the primary design they want built. Read it top to bottom — don't skim. Then **follow its imports**: open every file it pulls in (shared components, CSS, scripts) so you understand how the pieces fit together before you start implementing.
+- **Modules describe themselves.** The `modules` table holds the contract — what
+  a module publishes, what it subscribes to, whether a day sums or takes the
+  last reading. Each client holds the presentation half: the mark, the Log
+  label, the one line the module contributes to a calendar day. The dashboard is
+  a widget host, not a hand-built page.
+- **Crosstalk is read-only published series.** Weight publishes `weight.daily`,
+  Calories publishes `calories.daily`. The Weight × Calories chart owns neither
+  and subscribes to both.
+- **The calendar is the join key.** Every entry is timestamped, so every module
+  can render a day summary and the whole app agrees on what "Tuesday" means.
+- **Nothing writes to a module without review.** The Log is module-agnostic:
+  text in, parsed on the server, typed draft rows out, approved by hand.
+- **Sharing is per module.** Granting Weight does not grant Calories, and a
+  grant can be withdrawn without dropping the connection.
 
-**If anything is ambiguous, ask the user to confirm before you start implementing.** It's much cheaper to clarify scope up front than to build the wrong thing.
+## Getting it running
 
-## About the design files
+```bash
+# 1. the backend
+cd app && supabase start && supabase db reset
 
-The design medium is **HTML/CSS/JS** — these are prototypes, not production code. Your job is to **recreate them pixel-perfectly** in whatever technology makes sense for the target codebase (React, Vue, native, whatever fits). Match the visual output; don't copy the prototype's internal structure unless it happens to fit.
+# 2. the web app
+cd ../web && cp .env.example .env.local   # fill in from `supabase status`
+npm install && npm run dev
 
-**Don't render these files in a browser or take screenshots unless the user asks you to.** Everything you need — dimensions, colors, layout rules — is spelled out in the source. Read the HTML and CSS directly; a screenshot won't tell you anything they don't.
+# 3. the iOS app
+open ../ios/TrackALack.xcodeproj          # set SUPABASE_URL / SUPABASE_ANON_KEY
+```
 
-## Bundle contents
+The seed creates `you@trackalack.test` / `trackalack` with thirteen weeks of
+data, standing at the numbers the designs show on 2026-09-07.
 
-- `README.md` — this file
-- `chats/` — conversation transcripts (read these!)
-- `project/` — the `Habit tracking modular app` project files (HTML prototypes, assets, components)
+## Modules
+
+| Module | Records | Publishes |
+| --- | --- | --- |
+| Weight | A weigh-in, set by dragging rather than typed | `weight.daily` |
+| Calories | Meals, priced against USDA FoodData Central and Open Food Facts | `calories.daily`, `calories.meals` |
+| Reading | Pages against a book you add, with an optional note | `reading.pages`, `reading.books` |
+| Running | Distance and time | `running.miles`, `running.pace` |
+| Writing | Words per session | `writing.words` |
+| Sleep | Hours | `sleep.hours` |
+
+Weight, Calories and Reading are on for a new account; the rest are opt-in.
+Adding a seventh means a row in `modules`, a definition in each client's
+registry, and a widget — no changes to the dashboard, the calendar or the log.
+
+## External services
+
+All optional. Without keys the app still runs: log lines fall back to a
+deterministic parser, and an unpriced food becomes a "No match — set by hand"
+row you can fill in.
+
+- **OpenAI (GPT-5.6 Sol)** parses a log line into typed rows.
+- **USDA FoodData Central** and **Open Food Facts** price food. The source order
+  is a Calories setting; barcodes always resolve through Open Food Facts.
+
+## What has been verified
+
+- `app/` — every migration applies to a clean Postgres and the smoke test passes,
+  covering the new-account trigger, the meal re-sum, book progress, the daily
+  rollups, draft approval, and per-module sharing including revocation
+  (`./scripts/validate-migrations.sh --seed`). The seed lands on the designed
+  numbers exactly.
+- `web/` — typechecks and builds; every screen was driven in Chromium against
+  fixture data and checked against the canvas (`node tools/preview.mjs`).
+- `ios/` — **not compiled.** It was written on Linux, where there is no Xcode.
+- The edge functions have not been executed: that needs a Docker daemon for
+  `supabase start`, which this environment does not have.
