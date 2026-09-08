@@ -24,6 +24,10 @@ Each has its own README with setup, and they share one model:
 - **Crosstalk is read-only published series.** Weight publishes `weight.daily`,
   Calories publishes `calories.daily`. The Weight × Calories chart owns neither
   and subscribes to both.
+- **A module may record more than one unit.** Writing counts a session in words
+  or in minutes; the two are separate series and are never added together. The
+  module names a setting that picks which one leads on the calendar, and the
+  day rollup carries both.
 - **The calendar is the join key.** Every entry is timestamped, so every module
   can render a day summary and the whole app agrees on what "Tuesday" means.
 - **Nothing writes to a module without review.** The Log is module-agnostic:
@@ -56,12 +60,16 @@ data, standing at the numbers the designs show on 2026-09-07.
 | Calories | Meals, priced against USDA FoodData Central and Open Food Facts | `calories.daily`, `calories.meals` |
 | Reading | Pages against a book you add, with an optional note | `reading.pages`, `reading.books` |
 | Running | Distance and time | `running.miles`, `running.pace` |
-| Writing | Words per session | `writing.words` |
+| Writing | Sessions against a project, in words **or** minutes | `writing.words`, `writing.minutes`, `writing.projects` |
 | Sleep | Hours | `sleep.hours` |
 
 Weight, Calories and Reading are on for a new account; the rest are opt-in.
 Adding a seventh means a row in `modules`, a definition in each client's
 registry, and a widget — no changes to the dashboard, the calendar or the log.
+
+Writing is the one that keeps projects: a novel counted in words, morning pages
+counted in minutes, each with its own target. A session belongs to a project and
+is measured in either unit, whatever the project usually uses.
 
 ## External services
 

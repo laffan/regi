@@ -98,6 +98,8 @@ declare
 
   overstory uuid;
   piranesi  uuid;
+  novel        uuid;
+  morning_page uuid;
   meal_id   uuid;
   conn      uuid;
 
@@ -277,6 +279,51 @@ begin
           'the chestnut section is the hinge of the whole book',
           jsonb_build_object('book_id', overstory, 'end_page', 214));
 
+  -- ── writing projects ─────────────────────────────────────────────────────
+  -- Writing stays switched off, so the dashboard still opens on the three
+  -- modules the designs show. Turn it on in Settings → Modules and five weeks
+  -- of sessions are already there: a novel counted in words, morning pages
+  -- counted in minutes.
+  insert into public.writing_projects (user_id, title, kind, measure, target, target_kind, status, started_on, position)
+  values (me, 'The Lantern Room', 'Novel', 'words', 50000, 'total', 'active', '2026-08-03', 10)
+  returning id into novel;
+
+  insert into public.writing_projects (user_id, title, kind, measure, target, target_kind, status, started_on, position)
+  values (me, 'Morning pages', 'Journal', 'min', 30, 'daily', 'active', '2026-07-20', 20)
+  returning id into morning_page;
+
+  insert into public.writing_projects (user_id, title, kind, measure, target, target_kind, status, started_on, finished_on)
+  values (me, 'Conference talk', 'Talk', 'words', 3000, 'total', 'finished', '2026-06-15', '2026-07-02');
+
+  for i in 0..34 loop
+    d := today - 34 + i;
+
+    -- The novel on most weekdays.
+    if extract(isodow from d)::int <= 5 and (extract(doy from d)::int % 4) <> 2 then
+      insert into public.entries (user_id, module_slug, occurred_at, local_date, value, unit, label, payload)
+      values (me, 'writing', d + time '09:05', d,
+              340 + (extract(doy from d)::int * 37) % 520, 'words', 'The Lantern Room',
+              jsonb_build_object('project_id', novel));
+    end if;
+
+    -- Morning pages most days, counted in time rather than words.
+    if (extract(doy from d)::int % 5) <> 0 then
+      insert into public.entries (user_id, module_slug, occurred_at, local_date, value, unit, label, payload)
+      values (me, 'writing', d + time '07:00', d,
+              15 + (extract(doy from d)::int * 3) % 21, 'min', 'Morning pages',
+              jsonb_build_object('project_id', morning_page));
+    end if;
+  end loop;
+
+  -- Today, both measures on one day — 640 words on the novel, 25 minutes of pages.
+  delete from public.entries where user_id = me and module_slug = 'writing' and local_date = today;
+  insert into public.entries (user_id, module_slug, occurred_at, local_date, value, unit, label, payload)
+  values
+    (me, 'writing', today + time '09:05', today, 640, 'words', 'The Lantern Room',
+     jsonb_build_object('project_id', novel)),
+    (me, 'writing', today + time '07:00', today, 25, 'min', 'Morning pages',
+     jsonb_build_object('project_id', morning_page));
+
   -- ── saved meals ──────────────────────────────────────────────────────────
   insert into public.saved_meals (user_id, name, detail, kcal, items, uses) values
     (me, 'Usual breakfast', 'Oats 80 g · banana · black coffee', 420,
@@ -302,7 +349,9 @@ begin
     (me, 'calories', 'milestone', '30-day mean under 1,900',     'calories.daily', 1900, '<=', 'once',   date '2026-10-07', null),
     (me, 'reading',  'milestone', 'Finish The Overstory',        'reading.pages',   502, '>=', 'once',   date '2026-09-30', null),
     (me, 'reading',  'milestone', '5-day reading streak',        'reading.pages',     5, '>=', 'once',   date '2026-09-04',
-     timestamptz '2026-09-04 22:05');
+     timestamptz '2026-09-04 22:05'),
+    (me, 'writing',  'goal',      '750 words daily',             'writing.words',   750, '>=', 'daily',  null, null),
+    (me, 'writing',  'goal',      '30 minutes of pages',         'writing.minutes',  30, '>=', 'daily',  null, null);
 
   -- ── connections ──────────────────────────────────────────────────────────
   -- Marcus: he shares Reading, you share Weight and Reading.

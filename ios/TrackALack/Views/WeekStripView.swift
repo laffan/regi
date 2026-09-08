@@ -26,7 +26,7 @@ struct WeekStripView: View {
 
                     HStack(spacing: 4) {
                         ForEach(modules, id: \.slug) { module in
-                            let logged = totalFor(date, module.slug)?.value != nil
+                            let logged = totalFor(date, module.slug)?.isLogged ?? false
                             Rectangle()
                                 .fill(barColour(logged: logged, isToday: isToday))
                                 .frame(height: 5)

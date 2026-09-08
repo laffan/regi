@@ -15,8 +15,20 @@ export interface GoalReadout {
 
 interface Context {
   seriesFor: (slug: string) => Point[];
+  /** A module may publish more than one series — "750 words daily" and "30
+   *  minutes of pages" are both Writing goals, measured against different
+   *  numbers. */
+  seriesByName?: (series: string) => Point[];
   books: Book[];
   today: string;
+}
+
+function seriesForGoal(goal: Goal, ctx: Context): Point[] {
+  if (goal.series && ctx.seriesByName) {
+    const named = ctx.seriesByName(goal.series);
+    if (named.length) return named;
+  }
+  return ctx.seriesFor(goal.module_slug);
 }
 
 function meets(value: number, target: number, comparator: Goal['comparator']): boolean {
@@ -33,7 +45,7 @@ function meets(value: number, target: number, comparator: Goal['comparator']): b
 }
 
 export function readGoal(goal: Goal, ctx: Context): GoalReadout {
-  const series = ctx.seriesFor(goal.module_slug);
+  const series = seriesForGoal(goal, ctx);
 
   if (goal.kind === 'milestone') {
     // Reading milestones measure the book, not the daily page count.
@@ -108,7 +120,7 @@ export function upcoming(goals: Goal[], ctx: Context, limit = 4): UpcomingItem[]
     // written down. One line per goal either way.
     const projected =
       goal.kind === 'milestone' && goal.target !== null
-        ? projectToTarget(ctx.seriesFor(goal.module_slug), Number(goal.target))
+        ? projectToTarget(seriesForGoal(goal, ctx), Number(goal.target))
         : null;
 
     if (projected) {

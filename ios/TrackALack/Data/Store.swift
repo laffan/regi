@@ -18,6 +18,7 @@ final class Store: ObservableObject {
     @Published var recentEntries: [Entry] = []
     @Published var books: [Book] = []
     @Published var savedMeals: [SavedMeal] = []
+    @Published var writingProjects: [ProjectWithTotals] = []
     @Published var goals: [Goal] = []
     @Published var draft: Draft?
     @Published var draftRows: [DraftRow] = []
@@ -66,11 +67,50 @@ final class Store: ObservableObject {
         totals.first { $0.localDate == date && $0.moduleSlug == slug }
     }
 
+    /// The module's headline series. For a module recording two units that is
+    /// whichever one the rollup led with, which is the user's own setting.
     func series(_ slug: String) -> [SeriesPoint] {
-        totals
+        let def = Modules.def(slug)
+        if def.seriesByUnit != nil {
+            let unit = totals.first { $0.moduleSlug == slug }?.unit
+            if let unit, let named = def.seriesByUnit?[unit] {
+                return series(named: named)
+            }
+        }
+        return totals
             .filter { $0.moduleSlug == slug && $0.value != nil }
             .map { SeriesPoint(date: $0.localDate, value: $0.value ?? 0) }
             .sorted { $0.date < $1.date }
+    }
+
+    /// A named series, e.g. writing.minutes — the numbers a goal or a chart
+    /// asks for by name rather than by module.
+    func series(named series: String) -> [SeriesPoint] {
+        var points: [SeriesPoint] = []
+
+        for row in totals {
+            let def = Modules.def(row.moduleSlug)
+            if let byUnit = def.seriesByUnit {
+                for (unit, name) in byUnit where name == series {
+                    if let value = row.measures?[unit] {
+                        points.append(SeriesPoint(date: row.localDate, value: value))
+                    }
+                }
+            } else if def.primarySeries == series, let value = row.value {
+                points.append(SeriesPoint(date: row.localDate, value: value))
+            }
+        }
+
+        return points.sorted { $0.date < $1.date }
+    }
+
+    /// Anything recorded that day, whatever unit it was in.
+    func logged(_ date: String, _ slug: String) -> Bool {
+        total(date, slug)?.isLogged ?? false
+    }
+
+    var writingMeasure: WritingMeasure {
+        WritingMeasure(rawValue: userModule("writing")?.settings["measure"]?.stringValue ?? "words") ?? .words
     }
 
     func entries(on date: String) -> [Entry] {
@@ -155,6 +195,10 @@ final class Store: ObservableObject {
             async let bookRows: [Book] = Supabase.shared.select("books")
             async let meals: [SavedMeal] = Supabase.shared.select("saved_meals", filters: ["order": "uses.desc"])
             async let goalRows: [Goal] = Supabase.shared.select("goals", filters: ["active": "eq.true"])
+            async let projectRows: [WritingProject] = Supabase.shared.select(
+                "writing_projects", filters: ["order": "position"]
+            )
+            async let projectTotals: [WritingProjectTotals] = Supabase.shared.select("writing_project_totals")
 
             profile = try await profiles.first
             catalog = try await catalogRows
@@ -164,6 +208,19 @@ final class Store: ObservableObject {
             books = try await bookRows
             savedMeals = try await meals
             goals = try await goalRows
+
+            let projects = try await projectRows
+            let sums = try await projectTotals
+            let byId = Dictionary(uniqueKeysWithValues: sums.map { ($0.projectId, $0) })
+            writingProjects = projects.map { project in
+                let totals = byId[project.id]
+                return ProjectWithTotals(
+                    project: project,
+                    words: totals?.words ?? 0,
+                    minutes: totals?.minutes ?? 0,
+                    sessions: totals?.sessions ?? 0
+                )
+            }
 
             checkCatalogDrift()
             await loadDraft()
@@ -277,11 +334,63 @@ final class Store: ObservableObject {
         }
     }
 
-    func logWords(_ words: Int) async {
+    /// A writing session: which project, how much, and in which unit. A project
+    /// is the normal case; a line typed into the Log without one still records.
+    func logWritingSession(
+        project: WritingProject?,
+        amount: Double,
+        measure: WritingMeasure,
+        note: String? = nil
+    ) async {
         await run {
-            try await insertEntry([
-                "module_slug": "writing", "value": words, "unit": "words", "label": "\(words) words",
-            ])
+            var row: [String: Any] = [
+                "module_slug": "writing",
+                "value": amount,
+                "unit": measure.rawValue,
+                "label": project?.title ?? "\(Format.group(amount)) \(measure.short)",
+                "payload": project.map { ["project_id": $0.id] } ?? [:],
+            ]
+            if let note, !note.isEmpty { row["note"] = note }
+            try await insertEntry(row)
+        }
+    }
+
+    func addWritingProject(
+        title: String,
+        kind: String?,
+        measure: WritingMeasure,
+        target: Double?
+    ) async {
+        guard let userId = await Supabase.shared.userId else { return }
+        await run {
+            var values: [String: Any] = [
+                "user_id": userId,
+                "title": title,
+                "measure": measure.rawValue,
+                "target_kind": measure == .min ? "daily" : "total",
+                "started_on": Dates.today(),
+            ]
+            if let kind, !kind.isEmpty { values["kind"] = kind }
+            if let target { values["target"] = target }
+            let _: [WritingProject] = try await Supabase.shared.insert("writing_projects", values: values)
+        }
+    }
+
+    func updateWritingProject(_ id: String, values: [String: Any]) async {
+        await run {
+            try await Supabase.shared.update("writing_projects", values: values, filters: ["id": "eq.\(id)"])
+        }
+    }
+
+    /// Which unit leads on the calendar. Both are always recorded.
+    func setWritingMeasure(_ measure: WritingMeasure) async {
+        guard let userId = await Supabase.shared.userId else { return }
+        await run {
+            try await Supabase.shared.update(
+                "user_modules",
+                values: ["settings": ["measure": measure.rawValue]],
+                filters: ["user_id": "eq.\(userId)", "module_slug": "eq.writing"]
+            )
         }
     }
 

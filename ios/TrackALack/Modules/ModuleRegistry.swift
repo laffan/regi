@@ -12,6 +12,12 @@ struct ModuleDef {
     let primarySeries: String
     let publishes: [String]
     let subscribes: [String]
+    /// Unit → series, for a module that records more than one measure. Writing
+    /// counts a session in words or in minutes, and the two are never added
+    /// together: they are separate series, and the user's `measure` setting
+    /// picks which one leads on the calendar.
+    var seriesByUnit: [String: String]? = nil
+    var unitLabels: [String: String]? = nil
 }
 
 struct DaySummary {
@@ -51,7 +57,10 @@ enum Modules {
         ),
         "writing": ModuleDef(
             slug: "writing", name: "Writing", icon: .pencil, unit: "words", logLabel: "Log session",
-            primarySeries: "writing.words", publishes: ["writing.words"], subscribes: []
+            primarySeries: "writing.words",
+            publishes: ["writing.words", "writing.minutes", "writing.projects"], subscribes: [],
+            seriesByUnit: ["words": "writing.words", "min": "writing.minutes"],
+            unitLabels: ["words": "words", "min": "min"]
         ),
         "sleep": ModuleDef(
             slug: "sleep", name: "Sleep", icon: .bell, unit: "h", logLabel: "Log sleep",
@@ -69,8 +78,35 @@ enum Modules {
         order.compactMap { all[$0] }.first { $0.publishes.contains(series) }
     }
 
+    /// "640 words", "25 min" — one string per unit actually recorded that day.
+    static func measureParts(_ total: DailyTotal?) -> [String] {
+        guard let total else { return [] }
+        let labels = def("writing").unitLabels ?? [:]
+
+        let measures: [String: Double] = total.measures
+            ?? {
+                if let value = total.value, let unit = total.unit { return [unit: value] }
+                return [:]
+            }()
+
+        return measures
+            .sorted { lhs, rhs in
+                if lhs.key == "words" { return true }
+                if rhs.key == "words" { return false }
+                return lhs.key < rhs.key
+            }
+            .map { "\(Format.group($0.value)) \(labels[$0.key] ?? $0.key)" }
+    }
+
     /// What a module contributes to one calendar day.
     static func daySummary(_ slug: String, total: DailyTotal?, context: DayContext) -> DaySummary {
+        // Writing can hold minutes with no words, so it decides for itself.
+        if slug == "writing" {
+            let parts = measureParts(total)
+            guard let first = parts.first else { return DaySummary(text: "not logged") }
+            return DaySummary(text: first, note: parts.count > 1 ? parts[1] : nil)
+        }
+
         guard let value = total?.value else { return DaySummary(text: "not logged") }
 
         switch slug {

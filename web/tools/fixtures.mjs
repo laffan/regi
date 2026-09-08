@@ -1,9 +1,19 @@
 // Fixture data shaped exactly like the API responses, for the offline preview.
 // Mirrors app/supabase/seed.sql so the screens show the numbers the designs do.
 
-export const TODAY = '2026-09-07';
+// Anchored to the machine's today, so the preview always has a full current
+// day; the designed numbers land on the last five days whatever the date is.
+export const TODAY = new Date().toISOString().slice(0, 10);
 
 const iso = (date, time) => `${date}T${time}:00.000Z`;
+
+const daysAgo = (n) => {
+  const d = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+};
+
+const yesterday = daysAgo(1);
 
 export const profile = {
   id: 'a0000000-0000-4000-8000-000000000001',
@@ -37,8 +47,11 @@ export const modules = [
   },
   {
     slug: 'writing', name: 'Writing', icon: 'pencil', unit: 'words', value_kind: 'sum',
-    primary_series: 'writing.words', publishes: ['writing.words'], subscribes: [],
+    primary_series: 'writing.words',
+    publishes: ['writing.words', 'writing.minutes', 'writing.projects'], subscribes: [],
     log_label: 'Log session', sort_order: 50,
+    measure_setting: 'measure',
+    series_by_unit: { words: 'writing.words', min: 'writing.minutes' },
   },
   {
     slug: 'sleep', name: 'Sleep', icon: 'bell', unit: 'h', value_kind: 'sum',
@@ -53,7 +66,12 @@ export function userModules(activeSlugs) {
     module_slug: m.slug,
     active: activeSlugs.includes(m.slug),
     position: m.sort_order,
-    settings: m.slug === 'calories' ? { source_order: ['usda', 'off'], daily_target: 2200 } : {},
+    settings:
+      m.slug === 'calories'
+        ? { source_order: ['usda', 'off'], daily_target: 2200 }
+        : m.slug === 'writing'
+          ? { measure: 'words' }
+          : {},
   }));
 }
 
@@ -62,31 +80,48 @@ export function dailyTotals() {
   const rows = [];
   const end = new Date(`${TODAY}T00:00:00Z`);
 
-  const exact = {
-    '2026-09-07': { weight: 182.4, calories: 1480, reading: 24, running: 5.1, writing: 640, meals: 3 },
-    '2026-09-06': { weight: 182.6, calories: 2410, reading: 40, writing: 820, meals: 4 },
-    '2026-09-05': { calories: 1940, reading: 12, running: 3.2, meals: 4 },
-    '2026-09-04': { weight: 183.0, calories: 2120, reading: 36, writing: 910, meals: 3 },
-    '2026-09-03': { weight: 183.2, calories: 1760, reading: 30, running: 4.4, meals: 3 },
-  };
+  // Keyed by how many days back, so they always sit on the newest five days.
+  const exact = [
+    { weight: 182.4, calories: 1480, reading: 24, running: 5.1, writing: 640, minutes: 25, meals: 3 },
+    { weight: 182.6, calories: 2410, reading: 40, writing: 820, meals: 4 },
+    { calories: 1940, reading: 12, running: 3.2, minutes: 30, meals: 4 },
+    { weight: 183.0, calories: 2120, reading: 36, writing: 910, meals: 3 },
+    { weight: 183.2, calories: 1760, reading: 30, running: 4.4, minutes: 18, meals: 3 },
+  ];
 
   for (let back = 0; back < 90; back++) {
     const d = new Date(end);
     d.setUTCDate(d.getUTCDate() - back);
     const date = d.toISOString().slice(0, 10);
-    const fixed = exact[date];
+    const fixed = exact[back];
 
     const weight = fixed?.weight ?? (back % 9 === 3 ? null : Math.round((182.4 + back * 0.085 + Math.sin(back) * 0.35) * 10) / 10);
+    const minutes = fixed?.minutes ?? (back % 5 === 0 ? 0 : 15 + ((back * 3) % 21));
     const calories = fixed?.calories ?? Math.round(1700 + Math.sin(back * 1.7) * 380 + (back % 5) * 40);
     const reading = fixed?.reading ?? (back % 7 === 2 ? 0 : 10 + ((back * 7) % 26));
     const running = fixed?.running ?? (back % 3 === 0 ? Math.round((3 + (back % 4)) * 10) / 10 : 0);
     const writing = fixed?.writing ?? (back % 4 === 1 ? 0 : 400 + ((back * 53) % 500));
 
-    if (weight !== null) rows.push({ user_id: profile.id, local_date: date, module_slug: 'weight', value: weight, unit: 'lb', entry_count: 1, last_at: iso(date, '06:40') });
-    rows.push({ user_id: profile.id, local_date: date, module_slug: 'calories', value: calories, unit: 'kcal', entry_count: fixed?.meals ?? 3, last_at: iso(date, '19:20') });
-    if (reading) rows.push({ user_id: profile.id, local_date: date, module_slug: 'reading', value: reading, unit: 'pages', entry_count: 1, last_at: iso(date, '21:15') });
-    if (running) rows.push({ user_id: profile.id, local_date: date, module_slug: 'running', value: running, unit: 'mi', entry_count: 1, last_at: iso(date, '17:30') });
-    if (writing) rows.push({ user_id: profile.id, local_date: date, module_slug: 'writing', value: writing, unit: 'words', entry_count: 1, last_at: iso(date, '09:00') });
+    const row = (module_slug, value, unit, entry_count, at, measures) => ({
+      user_id: profile.id, local_date: date, module_slug, value, unit, entry_count,
+      last_at: iso(date, at), measures,
+    });
+
+    if (weight !== null) rows.push(row('weight', weight, 'lb', 1, '06:40', { lb: weight }));
+    rows.push(row('calories', calories, 'kcal', fixed?.meals ?? 3, '19:20', { kcal: calories }));
+    if (reading) rows.push(row('reading', reading, 'pages', 1, '21:15', { pages: reading }));
+    if (running) rows.push(row('running', running, 'mi', 1, '17:30', { mi: running }));
+
+    // Writing records words and minutes side by side; the day's headline is
+    // whichever unit the measure setting picks, and both stay in `measures`.
+    if (writing || minutes) {
+      const measures = {};
+      if (writing) measures.words = writing;
+      if (minutes) measures.min = minutes;
+      rows.push(
+        row('writing', writing || null, 'words', (writing ? 1 : 0) + (minutes ? 1 : 0), '09:00', measures),
+      );
+    }
   }
 
   return rows;
@@ -125,17 +160,27 @@ export const entries = [
     ],
   },
   {
+    id: 'e8', user_id: profile.id, module_slug: 'writing', occurred_at: iso(TODAY, '09:05'),
+    local_date: TODAY, value: 640, unit: 'words', label: 'The Lantern Room', note: null,
+    payload: { project_id: 'wp1' }, source: 'manual', items: [],
+  },
+  {
+    id: 'e9', user_id: profile.id, module_slug: 'writing', occurred_at: iso(TODAY, '07:00'),
+    local_date: TODAY, value: 25, unit: 'min', label: 'Morning pages', note: null,
+    payload: { project_id: 'wp2' }, source: 'manual', items: [],
+  },
+  {
     id: 'e5', user_id: profile.id, module_slug: 'weight', occurred_at: iso(TODAY, '06:40'),
     local_date: TODAY, value: 182.4, unit: 'lb', label: '182.4', note: null, payload: {}, source: 'manual', items: [],
   },
   {
-    id: 'e6', user_id: profile.id, module_slug: 'reading', occurred_at: iso('2026-09-06', '21:15'),
-    local_date: '2026-09-06', value: 40, unit: 'pages', label: '40 pages before bed', note: null,
+    id: 'e6', user_id: profile.id, module_slug: 'reading', occurred_at: iso(yesterday, '21:15'),
+    local_date: yesterday, value: 40, unit: 'pages', label: '40 pages before bed', note: null,
     payload: { book_id: 'b1', end_page: 190 }, source: 'manual', items: [],
   },
   {
-    id: 'e7', user_id: profile.id, module_slug: 'calories', occurred_at: iso('2026-09-06', '19:40'),
-    local_date: '2026-09-06', value: 880, unit: 'kcal', label: 'Two slices of pizza, salad', note: null,
+    id: 'e7', user_id: profile.id, module_slug: 'calories', occurred_at: iso(yesterday, '19:40'),
+    local_date: yesterday, value: 880, unit: 'kcal', label: 'Two slices of pizza, salad', note: null,
     payload: {}, source: 'manual', items: [],
   },
 ];
@@ -160,12 +205,13 @@ export const savedMeals = [
 export const goals = [
   { id: 'g1', module_slug: 'calories', kind: 'goal', title: 'Under 2,200', series: 'calories.daily', target: 2200, comparator: '<=', cadence: 'daily', due_on: null, achieved_at: null, active: true },
   { id: 'g2', module_slug: 'reading', kind: 'goal', title: '30 pages daily', series: 'reading.pages', target: 30, comparator: '>=', cadence: 'daily', due_on: null, achieved_at: null, active: true },
-  { id: 'g3', module_slug: 'weight', kind: 'goal', title: 'Weight check-in', series: 'weight.daily', target: null, comparator: null, cadence: 'weekly', due_on: '2026-09-14', achieved_at: null, active: true },
-  { id: 'g4', module_slug: 'weight', kind: 'milestone', title: '180.0 lb', series: 'weight.daily', target: 180, comparator: '<=', cadence: 'once', due_on: '2026-09-24', achieved_at: null, active: true },
-  { id: 'g5', module_slug: 'reading', kind: 'milestone', title: 'Finish The Overstory', series: 'reading.pages', target: 502, comparator: '>=', cadence: 'once', due_on: '2026-09-30', achieved_at: null, active: true },
-  { id: 'g6', module_slug: 'calories', kind: 'milestone', title: '30-day mean under 1,900', series: 'calories.daily', target: 1900, comparator: '<=', cadence: 'once', due_on: '2026-10-07', achieved_at: null, active: true },
+  { id: 'g3', module_slug: 'weight', kind: 'goal', title: 'Weight check-in', series: 'weight.daily', target: null, comparator: null, cadence: 'weekly', due_on: daysAgo(-7), achieved_at: null, active: true },
+  { id: 'g4', module_slug: 'weight', kind: 'milestone', title: '180.0 lb', series: 'weight.daily', target: 180, comparator: '<=', cadence: 'once', due_on: daysAgo(-17), achieved_at: null, active: true },
+  { id: 'g5', module_slug: 'reading', kind: 'milestone', title: 'Finish The Overstory', series: 'reading.pages', target: 502, comparator: '>=', cadence: 'once', due_on: daysAgo(-23), achieved_at: null, active: true },
+  { id: 'g6', module_slug: 'calories', kind: 'milestone', title: '30-day mean under 1,900', series: 'calories.daily', target: 1900, comparator: '<=', cadence: 'once', due_on: daysAgo(-30), achieved_at: null, active: true },
   { id: 'g7', module_slug: 'running', kind: 'goal', title: '20 mi weekly', series: 'running.miles', target: 20, comparator: '>=', cadence: 'weekly', due_on: null, achieved_at: null, active: true },
   { id: 'g8', module_slug: 'writing', kind: 'goal', title: '750 words daily', series: 'writing.words', target: 750, comparator: '>=', cadence: 'daily', due_on: null, achieved_at: null, active: true },
+  { id: 'g9', module_slug: 'writing', kind: 'goal', title: '30 minutes of pages', series: 'writing.minutes', target: 30, comparator: '>=', cadence: 'daily', due_on: null, achieved_at: null, active: true },
 ];
 
 export const draft = {
@@ -213,4 +259,28 @@ export const people = [
   { id: 'a2', email: 'marcus@example.com', display_name: 'Marcus Reid' },
   { id: 'a3', email: 'priya@example.com', display_name: 'Priya Raman' },
   { id: 'a4', email: 'jules@example.com', display_name: 'Jules Ortega' },
+];
+
+export const writingProjects = [
+  {
+    id: 'wp1', title: 'The Lantern Room', kind: 'Novel', measure: 'words',
+    target: 50000, target_kind: 'total', status: 'active',
+    started_on: '2026-08-03', finished_on: null, position: 10,
+  },
+  {
+    id: 'wp2', title: 'Morning pages', kind: 'Journal', measure: 'min',
+    target: 30, target_kind: 'daily', status: 'active',
+    started_on: '2026-07-20', finished_on: null, position: 20,
+  },
+  {
+    id: 'wp3', title: 'Conference talk', kind: 'Talk', measure: 'words',
+    target: 3000, target_kind: 'total', status: 'finished',
+    started_on: '2026-06-15', finished_on: '2026-07-02', position: 30,
+  },
+];
+
+export const writingProjectTotals = [
+  { project_id: 'wp1', words: 11140, minutes: 0, sessions: 19, last_on: TODAY, first_on: '2026-08-03' },
+  { project_id: 'wp2', words: 0, minutes: 697, sessions: 29, last_on: TODAY, first_on: '2026-07-20' },
+  { project_id: 'wp3', words: 3120, minutes: 0, sessions: 11, last_on: '2026-07-02', first_on: '2026-06-15' },
 ];

@@ -4,7 +4,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
-import type { Book, MealItem, ModuleSlug } from '@/lib/types';
+import type { Book, MealItem, ModuleSlug, WritingMeasure, WritingProject } from '@/lib/types';
 
 export const keys = {
   profile: ['profile'] as const,
@@ -16,10 +16,13 @@ export const keys = {
   savedMeals: ['saved-meals'] as const,
   goals: ['goals'] as const,
   draft: ['draft'] as const,
+  writingProjects: ['writing-projects'] as const,
   connections: ['connections'] as const,
 };
 
-const LOG_TOUCHED = ['totals', 'entries', 'series', 'books', 'goals', 'draft', 'saved-meals'];
+const LOG_TOUCHED = [
+  'totals', 'entries', 'series', 'books', 'goals', 'draft', 'saved-meals', 'writing-projects',
+];
 
 export function useInvalidateAfterLog() {
   const qc = useQueryClient();
@@ -48,6 +51,9 @@ export const useBooks = () => useQuery({ queryKey: keys.books, queryFn: api.getB
 export const useSavedMeals = () => useQuery({ queryKey: keys.savedMeals, queryFn: api.getSavedMeals });
 
 export const useGoals = () => useQuery({ queryKey: keys.goals, queryFn: api.getGoals });
+
+export const useWritingProjects = () =>
+  useQuery({ queryKey: keys.writingProjects, queryFn: api.getWritingProjects });
 
 export const usePendingDraft = () => useQuery({ queryKey: keys.draft, queryFn: api.getPendingDraft });
 
@@ -81,9 +87,39 @@ export function useLogRun() {
   });
 }
 
-export function useLogWords() {
+export function useLogWritingSession() {
   const done = useInvalidateAfterLog();
-  return useMutation({ mutationFn: (words: number) => api.logWords(words), onSuccess: done });
+  return useMutation({
+    mutationFn: ({
+      project,
+      amount,
+      measure,
+      note,
+    }: {
+      project: WritingProject | null;
+      amount: number;
+      measure: WritingMeasure;
+      note?: string;
+    }) => api.logWritingSession(project, amount, measure, note),
+    onSuccess: done,
+  });
+}
+
+export function useAddWritingProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (project: Partial<WritingProject>) => api.addWritingProject(project),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.writingProjects }),
+  });
+}
+
+export function useUpdateWritingProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<WritingProject> }) =>
+      api.updateWritingProject(id, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.writingProjects }),
+  });
 }
 
 export function useLogSleep() {

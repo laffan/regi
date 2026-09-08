@@ -1,4 +1,5 @@
 import { Icon } from './Icon';
+import { isLogged } from '@/data/series';
 import { dayNumber, dowShort } from '@/lib/dates';
 import type { ModuleDef } from '@/modules/registry';
 import type { DailyTotal } from '@/lib/types';
@@ -40,7 +41,7 @@ export function WeekStrip({ days, today, modules, totals, onSelect, compact }: P
               {modules.map((m) => (
                 <span
                   key={m.slug}
-                  className={totals.get(totalKey(date, m.slug))?.value != null ? 'mdot on' : 'mdot'}
+                  className={isLogged(totals.get(totalKey(date, m.slug))) ? 'mdot on' : 'mdot'}
                 />
               ))}
             </div>

@@ -42,6 +42,14 @@ struct ModuleDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Theme.bg)
 
+                // A module recording two units draws one against the other —
+                // words as bars, minutes as the line.
+                if pair == nil, let byUnit = def.seriesByUnit {
+                    MeasureChartCell(def: def, seriesByUnit: byUnit, window: range) { newRange in
+                        range = newRange
+                    }
+                }
+
                 // Chart — the crosstalk pair this module takes part in, if any.
                 if let pair {
                     VStack(alignment: .leading, spacing: 12) {
@@ -103,6 +111,11 @@ struct ModuleDetailView: View {
                 .background(Theme.bg)
 
                 GoalsAndMilestones(slug: slug)
+
+                if slug == "writing" {
+                    WritingProjectsPanel()
+                    HeadlineMeasurePanel()
+                }
 
                 if slug == "calories" {
                     SavedMealsPanel()
@@ -274,5 +287,229 @@ struct ModuleAPIPanel: View {
             Text(label).font(Theme.font(11)).opacity(0.55)
             Text(value).font(Theme.font(12.5, .heavy))
         }
+    }
+}
+
+
+/// Writing's chart: the headline unit as bars, the other as a dashed line.
+struct MeasureChartCell: View {
+    @EnvironmentObject var store: Store
+    let def: ModuleDef
+    let seriesByUnit: [String: String]
+    let window: Int
+    let onRange: (Int) -> Void
+
+    var body: some View {
+        let headlineUnit = store.writingMeasure.rawValue
+        let barSeries = seriesByUnit[headlineUnit] ?? def.primarySeries
+        let lineSeries = seriesByUnit.first { $0.key != headlineUnit }?.value
+
+        WidgetCell {
+            HStack {
+                Text("\(def.name) over time").font(Theme.heading(17))
+                Spacer()
+                Segmented(options: ["14 d", "30 d", "90 d"], selected: [14, 30, 90].firstIndex(of: window) ?? 1) { index in
+                    onRange([14, 30, 90][index])
+                }
+            }
+
+            CrosstalkChartView(
+                domain: Dates.rangeOfDays(store.today, window),
+                bars: store.series(named: barSeries),
+                line: lineSeries.map { store.series(named: $0) } ?? [],
+                lineDashed: true,
+                height: 150
+            )
+
+            ChartLegend(
+                lineLabel: lineSeries ?? "",
+                barLabel: barSeries,
+                lineDashed: true,
+                footnote: Projection.mean(store.series(named: barSeries)).map {
+                    "Mean \(Format.group($0)) \(store.writingMeasure.short)"
+                }
+            )
+        }
+    }
+}
+
+/// The projects, what each has accumulated, and a way to add one. A project
+/// carries its own measure — a novel counts words, morning pages count minutes
+/// — and a session may still be logged in the other one.
+struct WritingProjectsPanel: View {
+    @EnvironmentObject var store: Store
+    @State private var adding = false
+
+    var body: some View {
+        let active = store.writingProjects.filter(\.project.isActive)
+        let done = store.writingProjects.filter { !$0.project.isActive }
+
+        VStack(alignment: .leading, spacing: 10) {
+            Kicker(icon: .pencil, text: "Projects", muted: true)
+
+            ForEach(active) { item in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(item.project.title).font(Theme.font(13, .heavy))
+                        if let kind = item.project.kind {
+                            Text(kind).font(Theme.font(11)).opacity(0.55)
+                        }
+                        Spacer()
+                        Button("finish") {
+                            Task {
+                                await store.updateWritingProject(
+                                    item.id,
+                                    values: ["status": "finished", "finished_on": Dates.today()]
+                                )
+                            }
+                        }
+                        .font(Theme.font(11, .heavy))
+                        .foregroundStyle(Theme.accent)
+                    }
+
+                    Text(summary(item)).font(Theme.font(11.5)).opacity(0.6)
+
+                    if let target = item.project.target, item.project.targetKind == "total" {
+                        ProgressRule(fraction: item.amount / target)
+                    }
+                }
+                .padding(.vertical, 8)
+                .overlay(alignment: .bottom) { Rule() }
+            }
+
+            if active.isEmpty {
+                Text("No projects yet.").font(Theme.font(12.5)).opacity(0.6)
+            }
+            if !done.isEmpty {
+                Text("\(done.count) finished or shelved").font(Theme.font(11.5)).opacity(0.55)
+            }
+
+            Button {
+                adding = true
+            } label: {
+                Text("+ New project")
+                    .font(Theme.font(14, .heavy))
+                    .padding(.horizontal, 14)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .overlay(Rectangle().stroke(Theme.divider, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.ink)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.warm)
+        .sheet(isPresented: $adding) { NewProjectSheet() }
+    }
+
+    private func summary(_ item: ProjectWithTotals) -> String {
+        var line = "\(Format.group(item.amount)) \(item.project.unit.short)"
+        if let target = item.project.target {
+            line += item.project.targetKind == "total"
+                ? " of \(Format.group(target))"
+                : " · \(Format.group(target)) \(item.project.unit.short) a day"
+        }
+        return line + " · \(item.sessions) session\(item.sessions == 1 ? "" : "s")"
+    }
+}
+
+struct NewProjectSheet: View {
+    @EnvironmentObject var store: Store
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var title = ""
+    @State private var kind = ""
+    @State private var measure: WritingMeasure = .words
+    @State private var target = ""
+    @State private var busy = false
+
+    var body: some View {
+        SheetFrame(title: "New project") {
+            VStack(alignment: .leading, spacing: 14) {
+                field("Name", text: $title, placeholder: "The Lantern Room")
+                field("Kind (optional)", text: $kind, placeholder: "Novel")
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Measured in").font(Theme.font(12)).opacity(0.7)
+                    Segmented(
+                        options: WritingMeasure.allCases.map(\.label),
+                        selected: measure == .words ? 0 : 1
+                    ) { index in
+                        measure = index == 0 ? .words : .min
+                    }
+                }
+
+                field(
+                    measure == .words ? "Word-count target (optional)" : "Daily minutes target (optional)",
+                    text: $target,
+                    placeholder: measure == .words ? "50000" : "30"
+                )
+
+                LogControl(label: "Add project", busy: busy) {
+                    guard !title.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                    busy = true
+                    Task {
+                        await store.addWritingProject(
+                            title: title,
+                            kind: kind,
+                            measure: measure,
+                            target: Double(target)
+                        )
+                        busy = false
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private func field(_ label: String, text: Binding<String>, placeholder: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label).font(Theme.font(12)).opacity(0.7)
+            TextField(placeholder, text: text)
+                .textFieldStyle(.plain)
+                .font(Theme.font(15))
+                .padding(.horizontal, 10)
+                .frame(minHeight: 44)
+                .background(Theme.surface)
+                .overlay(Rectangle().stroke(Theme.divider, lineWidth: 1))
+        }
+    }
+}
+
+/// Which unit leads on the calendar. Both are always recorded.
+struct HeadlineMeasurePanel: View {
+    @EnvironmentObject var store: Store
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Kicker(icon: .chart, text: "Headline measure", muted: true)
+
+            ForEach(WritingMeasure.allCases, id: \.rawValue) { measure in
+                Button {
+                    Task { await store.setWritingMeasure(measure) }
+                } label: {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .stroke(store.writingMeasure == measure ? Theme.accent : Theme.divider, lineWidth: 1.5)
+                            .background(
+                                Circle()
+                                    .fill(store.writingMeasure == measure ? Theme.accent : .clear)
+                                    .padding(4)
+                            )
+                            .frame(width: 16, height: 16)
+                        Text("\(measure.label) lead on the calendar").font(Theme.font(13))
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.ink)
+            }
+
+            Text("Both are always recorded; this only picks which number the week strip and day lines show.")
+                .font(Theme.font(11)).opacity(0.55)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.warm)
     }
 }

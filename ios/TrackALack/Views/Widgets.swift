@@ -298,13 +298,30 @@ struct RunningWidget: View {
     }
 }
 
+/// Writing tracks projects, and a session is measured in words or in minutes.
+/// The widget leads with whichever unit the measure setting picks and shows the
+/// other beside it, because adding them together would be nonsense.
 struct WritingWidget: View {
     @EnvironmentObject var store: Store
     @State private var logging = false
 
     var body: some View {
-        let words = store.total(store.today, "writing")?.value ?? 0
-        let goal = store.goals.first { $0.moduleSlug == "writing" && $0.cadence == "daily" }?.target ?? 750
+        let measure = store.writingMeasure
+        let day = store.total(store.today, "writing")
+        let wordsToday = day?.measures?["words"] ?? 0
+        let minutesToday = day?.measures?["min"] ?? 0
+        let done = measure == .words ? wordsToday : minutesToday
+        let other = measure == .words ? minutesToday : wordsToday
+        let otherLabel = measure == .words ? "min" : "words"
+
+        let goal = store.goals.first {
+            $0.moduleSlug == "writing" && $0.cadence == "daily"
+                && $0.series == (measure == .words ? "writing.words" : "writing.minutes")
+        }
+        let target = goal?.target ?? (measure == .words ? 750 : 30)
+
+        let active = store.writingProjects.filter(\.project.isActive)
+        let lead = active.first
         let days = Dates.rangeOfDays(store.today, 14)
 
         WidgetCell {
@@ -312,34 +329,74 @@ struct WritingWidget: View {
                 NavigationLink(value: "writing") { Kicker(icon: .pencil, text: "Writing") }
                     .buttonStyle(.plain)
                 Spacer()
-                Text("words").font(Theme.font(11)).opacity(0.5)
+                Text("\(active.count) project\(active.count == 1 ? "" : "s")")
+                    .font(Theme.font(11)).opacity(0.5)
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(Format.group(words)).font(Theme.heading(40))
-                Text("of \(Format.group(goal))").font(Theme.font(11.5)).opacity(0.6)
+                Text(Format.group(done)).font(Theme.heading(40))
+                Text("of \(Format.group(target)) \(measure.short)")
+                    .font(Theme.font(11.5)).opacity(0.6)
+                if other > 0 {
+                    Spacer()
+                    Text("+ \(Format.group(other)) \(otherLabel)")
+                        .font(Theme.font(11.5)).opacity(0.6)
+                }
             }
 
+            if let lead {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(lead.project.title).font(Theme.font(13.5, .heavy))
+                        if let kind = lead.project.kind {
+                            Text(kind).font(Theme.font(11)).opacity(0.55)
+                        }
+                    }
+
+                    if let target = lead.project.target {
+                        let amount = lead.project.targetKind == "daily" ? done : lead.amount
+                        ProgressRule(fraction: amount / target)
+                        Text("\(Format.group(amount)) of \(Format.group(target)) \(lead.project.unit.short)"
+                             + (lead.project.targetKind == "daily" ? " today" : ""))
+                            .font(Theme.font(11.5)).opacity(0.6)
+                    } else {
+                        Text("\(lead.sessions) session\(lead.sessions == 1 ? "" : "s")")
+                            .font(Theme.font(11.5)).opacity(0.6)
+                    }
+                }
+            } else {
+                Text("No project yet — add one from the module.")
+                    .font(Theme.font(12.5)).opacity(0.6)
+            }
+
+            // Fourteen days of showing up; a day counts whichever unit it was in.
             HStack(spacing: 3) {
                 ForEach(days, id: \.self) { date in
-                    let value = store.total(date, "writing")?.value ?? 0
+                    let logged = store.logged(date, "writing")
                     Rectangle()
-                        .fill(value > 0 ? (date == store.today ? Theme.accent : Theme.ink) : Theme.ink.opacity(0.1))
+                        .fill(logged ? (date == store.today ? Theme.accent : Theme.ink) : Theme.ink.opacity(0.1))
                         .aspectRatio(1, contentMode: .fit)
                         .frame(maxWidth: .infinity)
                 }
             }
 
-            Text("Streak \(Projection.streak(store.series("writing")) { $0 > 0 }) days")
-                .font(Theme.font(11)).opacity(0.55)
+            if active.count > 1 {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(active.dropFirst().prefix(2)) { item in
+                        HStack {
+                            Text(item.project.title).font(Theme.font(12)).opacity(0.7)
+                            Spacer()
+                            Text("\(Format.group(item.amount)) \(item.project.unit.short)")
+                                .font(Theme.font(12)).opacity(0.55)
+                        }
+                    }
+                }
+            }
 
             LogControl(label: "Log session") { logging = true }
         }
         .sheet(isPresented: $logging) {
-            ValueSheet(title: "Log session", fields: [.init(key: "words", label: "Words written", placeholder: "640")]) { values in
-                guard let words = Int(values["words"] ?? "") else { return }
-                await store.logWords(words)
-            }
+            LogSessionSheet(projects: store.writingProjects, initialProjectId: lead?.id)
         }
     }
 }

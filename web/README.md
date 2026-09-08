@@ -20,6 +20,7 @@ src/
   data/                  api calls, React Query hooks, auth
   modules/registry.ts    what a module is: its mark, its Log label, its day line
   modules/goals.ts       goal readouts, the Coming up list, calendar flags
+  data/series.ts         day rollups → the series widgets and goals read
   components/widgets/    one widget per module, all ending in the same Log control
   pages/                 Dashboard, Log, Calendar, ModuleDetail, Settings, SignIn
 ```

@@ -275,7 +275,7 @@ struct MonthBlock: View {
         let cells = Dates.monthGrid(year: year, month: month)
         let dates = cells.compactMap { $0 }
         let logged = dates.filter { date in
-            modules.contains { store.total(date, $0.slug)?.value != nil }
+            modules.contains { store.logged(date, $0.slug) }
         }
 
         VStack(alignment: .leading, spacing: 6) {
@@ -341,7 +341,7 @@ struct MonthDay: View {
             VStack(spacing: 2) {
                 ForEach(modules, id: \.slug) { module in
                     Rectangle()
-                        .fill(barColour(logged: store.total(date, module.slug)?.value != nil))
+                        .fill(barColour(logged: store.logged(date, module.slug)))
                         .frame(height: 3)
                 }
             }

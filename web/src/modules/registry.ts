@@ -33,6 +33,15 @@ export interface ModuleDef {
   publishes: string[];
   subscribes: string[];
   logLabel: string;
+  /**
+   * Unit → series, for a module that records more than one measure. Writing
+   * counts a session in words or in minutes, and the two are never added
+   * together: they are separate series, and the user's `measure` setting picks
+   * which one leads on the calendar.
+   */
+  seriesByUnit?: Record<string, string>;
+  /** How each unit reads in a summary line. */
+  unitLabels?: Record<string, string>;
   /** What this module contributes to one day of the calendar. */
   daySummary: (day: DailyTotal | undefined, ctx: DayContext) => DaySummary;
 }
@@ -45,6 +54,18 @@ export interface DayContext {
 }
 
 const notLogged: DaySummary = { text: 'not logged' };
+
+/** "640 words", "25 min" — one string per unit actually recorded that day. */
+function measureParts(day: DailyTotal | undefined): string[] {
+  const measures = day?.measures ?? (day?.value != null && day.unit ? { [day.unit]: day.value } : null);
+  if (!measures) return [];
+
+  const labels = MODULES.writing.unitLabels ?? {};
+  return Object.entries(measures)
+    .filter(([, value]) => value != null)
+    .sort(([a], [b]) => (a === 'words' ? -1 : b === 'words' ? 1 : a.localeCompare(b)))
+    .map(([unit, value]) => `${group(Number(value))} ${labels[unit] ?? unit}`);
+}
 
 export const MODULES: Record<ModuleSlug, ModuleDef> = {
   weight: {
@@ -125,10 +146,18 @@ export const MODULES: Record<ModuleSlug, ModuleDef> = {
     unit: 'words',
     valueKind: 'sum',
     primarySeries: 'writing.words',
-    publishes: ['writing.words'],
+    publishes: ['writing.words', 'writing.minutes', 'writing.projects'],
     subscribes: [],
     logLabel: 'Log session',
-    daySummary: (day) => (day?.value == null ? notLogged : { text: `${group(day.value)} words` }),
+    seriesByUnit: { words: 'writing.words', min: 'writing.minutes' },
+    unitLabels: { words: 'words', min: 'min' },
+    daySummary: (day) => {
+      // A session is measured in words or in minutes, so the line reports
+      // whichever were recorded rather than one number that means neither.
+      const parts = measureParts(day);
+      if (!parts.length) return notLogged;
+      return { text: parts[0], note: parts[1] };
+    },
   },
 
   sleep: {

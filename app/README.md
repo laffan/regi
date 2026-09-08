@@ -58,6 +58,7 @@ module is.
 | `entries` | Every logged thing, with `local_date` as the calendar join key |
 | `meal_items` | The lines of a meal, each carrying its USDA/OFF match |
 | `books`, `saved_meals` | Reading's shelf and Calories' one-tap combinations |
+| `writing_projects` | Writing's projects, each with its own measure and target; totals are derived, never stored |
 | `goals` | Goals recur, milestones happen once; both surface on the calendar |
 | `log_drafts`, `log_draft_rows` | Parsed but unapproved — nothing reaches a module from here without review |
 | `connections`, `connection_shares` | Per-module sharing, withdrawable |
@@ -65,7 +66,21 @@ module is.
 
 Views: `daily_module_totals` (the number the week strip, day list and months
 grid read), `published_series` (crosstalk), `entry_feed` (the log, with meal
-items folded in), `my_connections`.
+items folded in), `writing_project_totals`, `my_connections`.
+
+**Two units in one module.** A Writing session is words or minutes, and the
+rollup must never add them together. Two nullable columns on `modules` make that
+declarative rather than a special case:
+
+- `measure_setting` names a key in `user_modules.settings` that picks the
+  headline unit — the number `daily_module_totals.value` reports.
+- `series_by_unit` maps units to series names, so Writing publishes
+  `writing.words` and `writing.minutes` separately.
+
+`daily_module_measures` holds one row per unit, `daily_module_totals` folds them
+into one row per module per day with a `measures` map beside the headline. A day
+with only minutes has a null `value` and a non-zero `entry_count`, which is why
+both clients test `entry_count` for "did I do this today", not `value`.
 
 Functions that must happen atomically are SQL, not edge functions:
 `approve_draft`, `log_meal`, `log_saved_meal`, `save_meal_from_entry`,

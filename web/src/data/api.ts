@@ -6,6 +6,10 @@ import { supabase, callFunction } from '@/lib/supabase';
 import type {
   Book,
   Connection,
+  ProjectWithTotals,
+  WritingMeasure,
+  WritingProject,
+  WritingProjectTotals,
   DailyTotal,
   Draft,
   DraftRow,
@@ -181,9 +185,6 @@ export const logRun = (miles: number, unit: 'mi' | 'km', seconds: number | null)
     payload: seconds ? { duration_s: seconds } : {},
   });
 
-export const logWords = (words: number) =>
-  insertEntry({ module_slug: 'writing', value: words, unit: 'words', label: `${words} words` });
-
 export const logSleep = (hours: number) =>
   insertEntry({ module_slug: 'sleep', value: hours, unit: 'h', label: `${hours} h` });
 
@@ -306,6 +307,74 @@ export async function addBook(book: Partial<Book>): Promise<Book> {
   if (error) throw error;
   return data as Book;
 }
+
+// ── writing ─────────────────────────────────────────────────────────────────
+
+/**
+ * Projects with their totals. The totals are a view over the sessions, never
+ * stored, so editing or deleting a session can't leave a project's count
+ * drifting.
+ */
+export async function getWritingProjects(): Promise<ProjectWithTotals[]> {
+  const [projects, totals] = await Promise.all([
+    supabase.from('writing_projects').select('*').order('status').order('position'),
+    supabase.from('writing_project_totals').select('*'),
+  ]);
+  if (projects.error) throw projects.error;
+  if (totals.error) throw totals.error;
+
+  const byId = new Map(
+    (totals.data as WritingProjectTotals[]).map((row) => [row.project_id, row]),
+  );
+
+  return (projects.data as WritingProject[]).map((project) => {
+    const sums = byId.get(project.id);
+    return {
+      ...project,
+      words: Number(sums?.words ?? 0),
+      minutes: Number(sums?.minutes ?? 0),
+      sessions: Number(sums?.sessions ?? 0),
+      last_on: sums?.last_on ?? null,
+    };
+  });
+}
+
+export async function addWritingProject(project: Partial<WritingProject>): Promise<WritingProject> {
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) throw new Error('not signed in');
+  const { data, error } = await supabase
+    .from('writing_projects')
+    .insert({ user_id: auth.user.id, ...project })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as WritingProject;
+}
+
+export async function updateWritingProject(id: string, patch: Partial<WritingProject>): Promise<void> {
+  const { error } = await supabase.from('writing_projects').update(patch).eq('id', id);
+  if (error) throw error;
+}
+
+/**
+ * A session, measured in one unit or the other. A project is the normal case;
+ * a line typed into the Log without naming one still records, it just does not
+ * count towards any project's total.
+ */
+export const logWritingSession = (
+  project: WritingProject | null,
+  amount: number,
+  measure: WritingMeasure,
+  note?: string,
+) =>
+  insertEntry({
+    module_slug: 'writing',
+    value: amount,
+    unit: measure,
+    label: project?.title ?? (measure === 'words' ? `${amount} words` : `${amount} min`),
+    note: note ?? null,
+    payload: project ? { project_id: project.id } : {},
+  });
 
 export async function getSavedMeals(): Promise<SavedMeal[]> {
   const { data, error } = await supabase

@@ -1,4 +1,4 @@
-import type { Book, Entry, Goal, Profile, SavedMeal, UserModule } from '@/lib/types';
+import type { Book, Entry, Goal, Profile, ProjectWithTotals, SavedMeal, UserModule } from '@/lib/types';
 import type { Point } from '@/lib/projection';
 import type { TotalsIndex } from '@/components/WeekStrip';
 
@@ -16,4 +16,5 @@ export interface WidgetProps {
   profile: Profile;
   books: Book[];
   savedMeals: SavedMeal[];
+  writingProjects: ProjectWithTotals[];
 }

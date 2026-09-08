@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react';
 import { Icon } from '@/components/Icon';
 import { indexTotals, totalKey } from '@/components/WeekStrip';
 import { useBooks, useDailyTotals, useGoals, useModules, useProfile } from '@/data/hooks';
+import { buildSeriesIndex, isLogged } from '@/data/series';
 import {
   addDays,
   dayNumber,
@@ -23,8 +24,7 @@ import {
 } from '@/lib/dates';
 import { flaggedDates, nearestMilestone, upcoming, type DayFlag } from '@/modules/goals';
 import { moduleDef } from '@/modules/registry';
-import type { DailyTotal, ModuleSlug } from '@/lib/types';
-import type { Point } from '@/lib/projection';
+import type { ModuleSlug } from '@/lib/types';
 
 type View = 'days' | 'months';
 
@@ -44,17 +44,8 @@ export function CalendarPage() {
   const books = useBooks();
 
   const totalsIndex = useMemo(() => indexTotals(totals.data), [totals.data]);
-  const seriesFor = useMemo(() => {
-    const bySlug = new Map<string, Point[]>();
-    for (const row of (totals.data ?? []) as DailyTotal[]) {
-      if (row.value === null) continue;
-      const list = bySlug.get(row.module_slug) ?? [];
-      list.push({ date: row.local_date, value: Number(row.value) });
-      bySlug.set(row.module_slug, list);
-    }
-    for (const list of bySlug.values()) list.sort((a, b) => a.date.localeCompare(b.date));
-    return (slug: string) => bySlug.get(slug) ?? [];
-  }, [totals.data]);
+  const series = useMemo(() => buildSeriesIndex(totals.data), [totals.data]);
+  const seriesFor = series.byModule;
 
   if (profile.isLoading || modules.isLoading) return <div className="spinner">Loading the calendar…</div>;
 
@@ -63,9 +54,10 @@ export function CalendarPage() {
   const defs = shown.map((m) => moduleDef(m.slug));
 
   const activeGoals = (goals.data ?? []).filter((g) => shown.some((m) => m.slug === g.module_slug));
-  const ahead = upcoming(activeGoals, { seriesFor, books: books.data ?? [], today }, 4);
+  const goalCtx = { seriesFor, seriesByName: series.byName, books: books.data ?? [], today };
+  const ahead = upcoming(activeGoals, goalCtx, 4);
   const flags = flaggedDates(activeGoals);
-  const nearest = nearestMilestone(activeGoals, { seriesFor, books: books.data ?? [], today });
+  const nearest = nearestMilestone(activeGoals, goalCtx);
 
   const calorieTarget = Number(active.find((m) => m.slug === 'calories')?.settings.daily_target ?? 2200);
   const readingGoal = Number(
@@ -287,7 +279,7 @@ function MonthBlock({
 }) {
   const cells = monthGrid(year, month);
   const dates = cells.filter((c): c is string => c !== null);
-  const logged = dates.filter((date) => defs.some((def) => totals.get(totalKey(date, def.slug))?.value != null));
+  const logged = dates.filter((date) => defs.some((def) => isLogged(totals.get(totalKey(date, def.slug)))));
 
   return (
     <div>
@@ -324,7 +316,7 @@ function MonthBlock({
                 {defs.map((def) => (
                   <span
                     key={def.slug}
-                    className={totals.get(totalKey(date, def.slug))?.value != null ? 'on' : undefined}
+                    className={isLogged(totals.get(totalKey(date, def.slug))) ? 'on' : undefined}
                   />
                 ))}
               </div>

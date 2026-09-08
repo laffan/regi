@@ -10,6 +10,7 @@ import { Icon } from '@/components/Icon';
 import { CrosstalkChart } from '@/components/CrosstalkChart';
 import {
   useAddGoal,
+  useAddWritingProject,
   useBooks,
   useDailyTotals,
   useEntries,
@@ -20,13 +21,16 @@ import {
   useSavedMeals,
   useSetModuleActive,
   useSetModuleSettings,
+  useUpdateWritingProject,
+  useWritingProjects,
 } from '@/data/hooks';
+import { buildSeriesIndex } from '@/data/series';
 import { addDays, rangeOfDays, timeOfDay, today as todayISO } from '@/lib/dates';
 import { group, moduleValue } from '@/lib/format';
-import { mean, movingMean, type Point } from '@/lib/projection';
+import { mean, movingMean } from '@/lib/projection';
 import { readGoal } from '@/modules/goals';
 import { CROSSTALK, moduleDef, MODULES, publisherOf, subscribersOf } from '@/modules/registry';
-import type { DailyTotal, FoodSource, MealItem, ModuleSlug } from '@/lib/types';
+import type { FoodSource, MealItem, ModuleSlug, ProjectWithTotals, WritingMeasure, WritingProject } from '@/lib/types';
 
 const RANGES = [14, 30, 90] as const;
 
@@ -44,22 +48,16 @@ export function ModuleDetail() {
   const goals = useGoals();
   const books = useBooks();
   const savedMeals = useSavedMeals();
+  const writingProjects = useWritingProjects();
+  const addProject = useAddWritingProject();
+  const updateProject = useUpdateWritingProject();
   const setActive = useSetModuleActive();
   const setSettings = useSetModuleSettings();
   const quickAdd = useLogSavedMeal();
   const addGoal = useAddGoal();
 
-  const seriesFor = useMemo(() => {
-    const bySlug = new Map<string, Point[]>();
-    for (const row of (totals.data ?? []) as DailyTotal[]) {
-      if (row.value === null) continue;
-      const list = bySlug.get(row.module_slug) ?? [];
-      list.push({ date: row.local_date, value: Number(row.value) });
-      bySlug.set(row.module_slug, list);
-    }
-    for (const list of bySlug.values()) list.sort((a, b) => a.date.localeCompare(b.date));
-    return (s: string) => bySlug.get(s) ?? [];
-  }, [totals.data]);
+  const series = useMemo(() => buildSeriesIndex(totals.data), [totals.data]);
+  const seriesFor = series.byModule;
 
   if (modules.isLoading || profile.isLoading) return <div className="spinner">Loading module…</div>;
 
@@ -74,12 +72,22 @@ export function ModuleDetail() {
   const barModule = pair ? publisherOf(pair.bars) : def;
   const lineModule = pair ? publisherOf(pair.line) : def;
 
+  // A module that records two units draws one against the other — words as
+  // bars, minutes as the line — instead of plotting a series against itself.
+  const otherUnitSeries = def.seriesByUnit
+    ? Object.entries(def.seriesByUnit).find(([, name]) => name !== headlineSeries(def, series))?.[1]
+    : undefined;
+
   const bars = (barModule ? seriesFor(barModule.slug) : []).slice(-range);
-  const rawLine = (lineModule ? seriesFor(lineModule.slug) : []).slice(-range);
-  const line = lineModule?.slug === 'weight' ? movingMean(rawLine, 7) : rawLine;
+  const rawLine = pair
+    ? (lineModule ? seriesFor(lineModule.slug) : [])
+    : otherUnitSeries
+      ? series.byName(otherUnitSeries)
+      : [];
+  const line = (lineModule?.slug === 'weight' ? movingMean(rawLine, 7) : rawLine).slice(-range);
 
   const moduleGoals = (goals.data ?? []).filter((g) => g.module_slug === slug);
-  const goalCtx = { seriesFor, books: books.data ?? [], today };
+  const goalCtx = { seriesFor, seriesByName: series.byName, books: books.data ?? [], today };
   // The marker belongs to whichever module draws the line — inside Calories,
   // that is the Weight milestone the trend is heading for, not a calorie one.
   const milestone = (goals.data ?? []).find(
@@ -145,11 +153,13 @@ export function ModuleDetail() {
                 barTargetLabel={`${group(calorieTarget)} target`}
                 line={line}
                 lineLabel={
-                  lineModule && lineModule.slug !== slug
-                    ? `${lineModule.primarySeries} (from ${lineModule.name})`
-                    : def.primarySeries
+                  !pair && otherUnitSeries
+                    ? otherUnitSeries
+                    : lineModule && lineModule.slug !== slug
+                      ? `${lineModule.primarySeries} (from ${lineModule.name})`
+                      : def.primarySeries
                 }
-                lineDashed={pair?.lineDashed}
+                lineDashed={pair ? pair.lineDashed : true}
                 goal={milestone ? { target: Number(milestone.target), label: milestone.title } : null}
                 height={220}
                 footnote={barMean !== null ? `Mean ${group(barMean)} ${barModule?.unit ?? ''}` : undefined}
@@ -288,6 +298,19 @@ export function ModuleDetail() {
             </div>
           </div>
 
+          {slug === 'writing' ? (
+            <WritingProjectsPanel
+              projects={writingProjects.data ?? []}
+              measure={(state?.settings.measure as 'words' | 'min') ?? 'words'}
+              onMeasure={(measure) =>
+                setSettings.mutate({ slug: 'writing', settings: { ...state?.settings, measure } })
+              }
+              onAdd={(project) => addProject.mutate(project)}
+              onUpdate={(id, patch) => updateProject.mutate({ id, patch })}
+              busy={addProject.isPending || updateProject.isPending}
+            />
+          ) : null}
+
           {isCalories ? (
             <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--line)' }}>
               <div className="kickn">
@@ -407,6 +430,158 @@ export function ModuleDetail() {
           ) : null}
 
           {!MODULES[slug as ModuleSlug] ? <div className="error">Unknown module.</div> : null}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** Which series the module's headline unit maps to, for the detail chart. */
+function headlineSeries(
+  def: ReturnType<typeof moduleDef>,
+  series: ReturnType<typeof buildSeriesIndex>,
+): string {
+  const headline = series.byModule(def.slug);
+  if (!def.seriesByUnit) return def.primarySeries;
+  return (
+    Object.values(def.seriesByUnit).find((name) => series.byName(name) === headline) ??
+    def.primarySeries
+  );
+}
+
+/**
+ * Writing's own panel: the projects, what each has accumulated, and which unit
+ * leads on the calendar. A project carries its own measure — a novel counts
+ * words, morning pages count minutes — and a session may still be logged in
+ * the other one.
+ */
+function WritingProjectsPanel({
+  projects,
+  measure,
+  onMeasure,
+  onAdd,
+  onUpdate,
+  busy,
+}: {
+  projects: ProjectWithTotals[];
+  measure: WritingMeasure;
+  onMeasure: (measure: WritingMeasure) => void;
+  onAdd: (project: Partial<WritingProject>) => void;
+  onUpdate: (id: string, patch: Partial<WritingProject>) => void;
+  busy: boolean;
+}) {
+  const active = projects.filter((p) => p.status === 'active');
+  const done = projects.filter((p) => p.status !== 'active');
+
+  return (
+    <>
+      <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--line)' }}>
+        <div className="kickn">
+          <Icon name="pencil" />
+          Projects
+        </div>
+
+        <div style={{ marginTop: 8 }}>
+          {active.map((project) => {
+            const amount = project.measure === 'words' ? project.words : project.minutes;
+            const unit = project.measure === 'words' ? 'words' : 'min';
+            return (
+              <div key={project.id} style={{ padding: '9px 0', borderBottom: '1px solid var(--line)' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <span style={{ font: "800 13px 'Archivo'" }}>{project.title}</span>
+                  {project.kind ? (
+                    <span style={{ fontSize: 11, opacity: 0.55 }}>{project.kind}</span>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ marginLeft: 'auto', padding: '0 4px', fontSize: 11 }}
+                    disabled={busy}
+                    onClick={() => onUpdate(project.id, { status: 'finished', finished_on: todayISO() })}
+                  >
+                    finish
+                  </button>
+                </div>
+
+                <div style={{ fontSize: 11.5, opacity: 0.6, marginTop: 2 }}>
+                  {group(amount)} {unit}
+                  {project.target && project.target_kind === 'total'
+                    ? ` of ${group(project.target)}`
+                    : project.target
+                      ? ` · ${group(project.target)} ${unit} a day`
+                      : ''}
+                  {` · ${project.sessions} session${project.sessions === 1 ? '' : 's'}`}
+                </div>
+
+                {project.target && project.target_kind === 'total' ? (
+                  <div className="bar" style={{ marginTop: 6 }}>
+                    <span style={{ width: `${Math.min(amount / project.target, 1) * 100}%` }} />
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+
+          {active.length === 0 ? (
+            <div style={{ fontSize: 12.5, opacity: 0.6 }}>No projects yet.</div>
+          ) : null}
+
+          {done.length ? (
+            <div style={{ fontSize: 11.5, opacity: 0.55, marginTop: 8 }}>
+              {done.length} finished or shelved
+            </div>
+          ) : null}
+        </div>
+
+        <button
+          type="button"
+          className="btn btn-secondary btn-block"
+          disabled={busy}
+          onClick={() => {
+            const title = window.prompt('Project name, e.g. "The Lantern Room"');
+            if (!title) return;
+            const kind = window.prompt('What kind of thing is it? (optional)') ?? undefined;
+            const inMinutes = window.confirm('Measure this project in minutes? Cancel for words.');
+            const target = window.prompt(
+              inMinutes ? 'Daily minutes target (optional)' : 'Word-count target (optional)',
+            );
+            onAdd({
+              title,
+              kind: kind || null,
+              measure: inMinutes ? 'min' : 'words',
+              target: target ? Number(target) : null,
+              target_kind: inMinutes ? 'daily' : 'total',
+              started_on: todayISO(),
+            });
+          }}
+        >
+          + New project
+        </button>
+      </div>
+
+      <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--line)' }}>
+        <div className="kickn">Headline measure</div>
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12.5 }}>
+          {(
+            [
+              ['words', 'Words lead on the calendar'],
+              ['min', 'Minutes lead on the calendar'],
+            ] as const
+          ).map(([value, label]) => (
+            <label className="radio" key={value}>
+              <input
+                type="radio"
+                name="measure"
+                checked={measure === value}
+                onChange={() => onMeasure(value)}
+              />
+              <span className="dot" />
+              {label}
+            </label>
+          ))}
+        </div>
+        <div style={{ fontSize: 11, opacity: 0.55, marginTop: 8 }}>
+          Both are always recorded; this only picks which number the week strip and day lines show.
         </div>
       </div>
     </>

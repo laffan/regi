@@ -137,6 +137,95 @@ begin
 end
 $$;
 
+-- Writing: one project, two units on the same day. The rollup must keep them
+-- apart — 800 words and 25 minutes is not 825 of anything.
+with p as (
+  insert into public.writing_projects (user_id, title, kind, measure, target, target_kind)
+  values (auth.uid(), 'The Lantern Room', 'Novel', 'words', 50000, 'total')
+  returning id
+)
+insert into public.entries (user_id, module_slug, occurred_at, local_date, value, unit, label, payload)
+select auth.uid(), 'writing', '2026-09-07T09:05:00Z'::timestamptz, date '2026-09-07', 800, 'words',
+       'The Lantern Room', jsonb_build_object('project_id', p.id)
+  from p
+union all
+select auth.uid(), 'writing', '2026-09-07T07:00:00Z'::timestamptz, date '2026-09-07', 25, 'min',
+       'Morning pages', jsonb_build_object('project_id', p.id)
+  from p;
+
+do $$
+declare
+  headline       numeric;
+  headunit       text;
+  sessions       int;
+  unit_measures  jsonb;
+  project_words  numeric;
+  project_mins   numeric;
+  words_series   numeric;
+  minutes_series numeric;
+begin
+  select value, unit, entry_count, measures
+    into headline, headunit, sessions, unit_measures
+    from public.daily_module_totals
+   where module_slug = 'writing' and local_date = '2026-09-07';
+
+  if headunit <> 'words' then
+    raise exception 'writing headline unit should follow the module setting, got %', headunit;
+  end if;
+  if headline <> 800 then
+    raise exception 'headline value should be the words total, got %', headline;
+  end if;
+  if sessions <> 2 then
+    raise exception 'both sessions should count towards the day, got %', sessions;
+  end if;
+  if (unit_measures ->> 'words')::numeric <> 800 or (unit_measures ->> 'min')::numeric <> 25 then
+    raise exception 'measures should carry both units, got %', unit_measures;
+  end if;
+
+  select wpt.words, wpt.minutes into project_words, project_mins
+    from public.writing_project_totals wpt
+    join public.writing_projects wp on wp.id = wpt.project_id
+   where wp.title = 'The Lantern Room';
+
+  if project_words <> 800 or project_mins <> 25 then
+    raise exception 'project totals wrong: % words, % minutes', project_words, project_mins;
+  end if;
+
+  select value into words_series from public.published_series
+   where series = 'writing.words' and local_date = '2026-09-07';
+  select value into minutes_series from public.published_series
+   where series = 'writing.minutes' and local_date = '2026-09-07';
+
+  if words_series <> 800 or minutes_series <> 25 then
+    raise exception 'writing should publish one series per unit, got % / %', words_series, minutes_series;
+  end if;
+end
+$$;
+
+-- Switching the headline unit moves the leading number without touching data.
+update public.user_modules
+   set settings = settings || '{"measure":"min"}'::jsonb
+ where module_slug = 'writing' and user_id = auth.uid();
+
+do $$
+declare
+  headline numeric;
+  headunit text;
+begin
+  select value, unit into headline, headunit
+    from public.daily_module_totals
+   where module_slug = 'writing' and local_date = '2026-09-07';
+
+  if headunit <> 'min' or headline <> 25 then
+    raise exception 'headline should follow the setting, got % %', headline, headunit;
+  end if;
+end
+$$;
+
+update public.user_modules
+   set settings = settings || '{"measure":"words"}'::jsonb
+ where module_slug = 'writing' and user_id = auth.uid();
+
 -- Bo can see nothing of Ana's yet.
 select set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
 do $$
@@ -164,11 +253,13 @@ declare
   calorie_rows  int;
   meal_rows     int;
   book_rows     int;
+  project_rows  int;
 begin
   select count(*) into weight_rows  from public.entries where module_slug = 'weight';
   select count(*) into calorie_rows from public.entries where module_slug = 'calories';
   select count(*) into meal_rows    from public.meal_items;
   select count(*) into book_rows    from public.books;
+  select count(*) into project_rows from public.writing_projects;
 
   if weight_rows = 0 then
     raise exception 'shared Weight entries are not visible to the connection';
@@ -178,6 +269,9 @@ begin
   end if;
   if book_rows <> 0 then
     raise exception 'Reading leaked on a Weight-only share';
+  end if;
+  if project_rows <> 0 then
+    raise exception 'Writing projects leaked on a Weight-only share';
   end if;
 end
 $$;

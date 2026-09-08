@@ -8,13 +8,23 @@ import { CrosstalkChart } from '@/components/CrosstalkChart';
 import { GoalsPanel, ModulesPanel } from '@/components/Panels';
 import { StripLegend, WeekStrip, indexTotals } from '@/components/WeekStrip';
 import { WIDGETS } from '@/components/widgets';
-import { useBooks, useDailyTotals, useEntries, useGoals, useModules, useProfile, useSavedMeals } from '@/data/hooks';
+import {
+  useBooks,
+  useDailyTotals,
+  useEntries,
+  useGoals,
+  useModules,
+  useProfile,
+  useSavedMeals,
+  useWritingProjects,
+} from '@/data/hooks';
+import { buildSeriesIndex } from '@/data/series';
 import { addDays, rangeOfDays, startOfWeek, today as todayISO, weekDays, weekLabel } from '@/lib/dates';
 import { group } from '@/lib/format';
 import { mean, movingMean, type Point } from '@/lib/projection';
 import { readGoal, upcoming } from '@/modules/goals';
 import { CROSSTALK, moduleDef, publisherOf } from '@/modules/registry';
-import type { DailyTotal, Goal, ModuleSlug } from '@/lib/types';
+import type { Goal, ModuleSlug } from '@/lib/types';
 
 const HISTORY_DAYS = 90;
 
@@ -29,20 +39,11 @@ export function Dashboard() {
   const goals = useGoals();
   const books = useBooks();
   const savedMeals = useSavedMeals();
+  const writingProjects = useWritingProjects();
 
   const totalsIndex = useMemo(() => indexTotals(totals.data), [totals.data]);
-
-  const seriesFor = useMemo(() => {
-    const bySlug = new Map<string, Point[]>();
-    for (const row of (totals.data ?? []) as DailyTotal[]) {
-      if (row.value === null) continue;
-      const list = bySlug.get(row.module_slug) ?? [];
-      list.push({ date: row.local_date, value: Number(row.value) });
-      bySlug.set(row.module_slug, list);
-    }
-    for (const list of bySlug.values()) list.sort((a, b) => a.date.localeCompare(b.date));
-    return (slug: string) => bySlug.get(slug) ?? [];
-  }, [totals.data]);
+  const series = useMemo(() => buildSeriesIndex(totals.data), [totals.data]);
+  const seriesFor = series.byModule;
 
   if (profile.isLoading || modules.isLoading || totals.isLoading) {
     return <div className="spinner">Loading your week…</div>;
@@ -59,7 +60,7 @@ export function Dashboard() {
 
   const days = weekDays(startOfWeek(today));
   const activeGoals = (goals.data ?? []).filter((g) => active.some((m) => m.slug === g.module_slug));
-  const goalCtx = { seriesFor, books: books.data ?? [], today };
+  const goalCtx = { seriesFor, seriesByName: series.byName, books: books.data ?? [], today };
   // Recurring goals first, with the last slot kept for the nearest milestone —
   // the panel is meant to answer "how is today going, and what is close".
   const slots = compact ? 4 : 3;
@@ -81,7 +82,14 @@ export function Dashboard() {
     profile: profile.data,
     books: books.data ?? [],
     savedMeals: savedMeals.data ?? [],
+    writingProjects: writingProjects.data ?? [],
   };
+
+  // The panel takes whatever the widgets leave, so the grid never ends on a
+  // hole — five cells across three columns is four widgets and a wide panel.
+  const cells = count + 1;
+  const overhang = cells % columns;
+  const panelSpan = overhang === 0 ? 1 : columns - overhang + 1;
 
   const goalsPanel = (
     <GoalsPanel
@@ -91,6 +99,7 @@ export function Dashboard() {
       readouts={readouts}
       ahead={ahead}
       compact={compact}
+      span={panelSpan}
     />
   );
 
@@ -123,7 +132,13 @@ export function Dashboard() {
           className="wgrid"
           style={{
             gridTemplateColumns:
-              charts.length > 1 ? 'repeat(2, minmax(0, 1fr))' : count === 3 ? '2fr 1fr' : 'minmax(0, 1fr) 300px',
+              charts.length > 1
+                ? 'repeat(2, minmax(0, 1fr))'
+                : count === 3
+                  ? '2fr 1fr'
+                  : count < 3
+                    ? 'minmax(0, 1fr) 300px'
+                    : 'minmax(0, 1fr)',
           }}
         >
           {charts.map((chart) => (

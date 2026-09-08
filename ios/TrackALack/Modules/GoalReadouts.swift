@@ -22,9 +22,20 @@ enum GoalReadouts {
         let achieved: Bool
     }
 
+    /// A module may publish more than one series — "750 words daily" and "30
+    /// minutes of pages" are both Writing goals against different numbers.
+    @MainActor
+    static func series(for goal: Goal, store: Store) -> [SeriesPoint] {
+        if let named = goal.series {
+            let points = store.series(named: named)
+            if !points.isEmpty { return points }
+        }
+        return store.series(goal.moduleSlug)
+    }
+
     @MainActor
     static func read(_ goal: Goal, store: Store) -> Readout {
-        let series = store.series(goal.moduleSlug)
+        let points = series(for: goal, store: store)
 
         if goal.isMilestone {
             // A reading milestone measures the book, not the daily page count.
@@ -38,8 +49,8 @@ enum GoalReadouts {
             }
 
             if let target = goal.target {
-                let recent = Array(series.suffix(30))
-                let current = goal.moduleSlug == "weight" ? series.last?.value : Projection.mean(recent)
+                let recent = Array(points.suffix(30))
+                let current = goal.moduleSlug == "weight" ? points.last?.value : Projection.mean(recent)
                 if let current {
                     let gap = abs(current - target)
                     let text = goal.moduleSlug == "weight"
@@ -57,7 +68,7 @@ enum GoalReadouts {
         }
 
         if let target = goal.target, goal.cadence == "daily" {
-            let window = Array(series.suffix(7))
+            let window = Array(points.suffix(7))
             let met = window.filter { meets($0.value, target, goal.comparator) }.count
             return Readout(goal: goal, progress: "\(met) of \(window.isEmpty ? 7 : window.count) days", accent: false)
         }
@@ -67,7 +78,7 @@ enum GoalReadouts {
             return Readout(goal: goal, progress: "next \(Dates.shortDate(next))", accent: false)
         }
 
-        return Readout(goal: goal, progress: "streak \(Projection.streak(series) { $0 > 0 })", accent: false)
+        return Readout(goal: goal, progress: "streak \(Projection.streak(points) { $0 > 0 })", accent: false)
     }
 
     private static func meets(_ value: Double, _ target: Double, _ comparator: String?) -> Bool {
@@ -102,7 +113,7 @@ enum GoalReadouts {
             // A milestone the trend reaches is listed at its projected date —
             // the same marker the chart draws — rather than when it was written.
             let projected = goal.isMilestone && goal.target != nil
-                ? Projection.projectToTarget(store.series(goal.moduleSlug), target: goal.target ?? 0)
+                ? Projection.projectToTarget(series(for: goal, store: store), target: goal.target ?? 0)
                 : nil
 
             if let projected {

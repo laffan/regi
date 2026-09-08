@@ -13,6 +13,10 @@ export interface ModuleRow {
   subscribes: string[];
   log_label: string;
   sort_order: number;
+  /** Settings key naming the unit that leads, for modules recording more than one. */
+  measure_setting: string | null;
+  /** Unit → series name, for modules publishing one series per unit. */
+  series_by_unit: Record<string, string> | null;
 }
 
 export interface UserModule {
@@ -23,6 +27,8 @@ export interface UserModule {
   settings: {
     source_order?: FoodSource[];
     daily_target?: number;
+    /** Writing: which unit leads on the calendar. */
+    measure?: WritingMeasure;
     [key: string]: unknown;
   };
 }
@@ -60,10 +66,45 @@ export interface DailyTotal {
   user_id: string;
   local_date: string;
   module_slug: ModuleSlug;
+  /** The headline unit's number; null when the day only holds another unit. */
   value: number | null;
   unit: string | null;
   entry_count: number;
   last_at: string;
+  /** Every unit recorded that day, e.g. { words: 640, min: 25 }. */
+  measures: Record<string, number> | null;
+}
+
+export type WritingMeasure = 'words' | 'min';
+
+export interface WritingProject {
+  id: string;
+  title: string;
+  kind: string | null;
+  measure: WritingMeasure;
+  target: number | null;
+  target_kind: 'total' | 'daily';
+  status: 'active' | 'finished' | 'shelved';
+  started_on: string | null;
+  finished_on: string | null;
+  position: number;
+}
+
+export interface WritingProjectTotals {
+  project_id: string;
+  words: number;
+  minutes: number;
+  sessions: number;
+  last_on: string | null;
+  first_on: string | null;
+}
+
+/** A project with its derived totals folded in. */
+export interface ProjectWithTotals extends WritingProject {
+  words: number;
+  minutes: number;
+  sessions: number;
+  last_on: string | null;
 }
 
 export interface Book {

@@ -89,6 +89,10 @@ struct ModuleRow: Codable, Identifiable, Equatable {
     let subscribes: [String]
     let logLabel: String
     let sortOrder: Int
+    /// Settings key naming the unit that leads, for modules recording more than one.
+    let measureSetting: String?
+    /// Unit → series name, for modules publishing one series per unit.
+    let seriesByUnit: [String: String]?
 
     var id: String { slug }
 
@@ -98,6 +102,8 @@ struct ModuleRow: Codable, Identifiable, Equatable {
         case primarySeries = "primary_series"
         case logLabel = "log_label"
         case sortOrder = "sort_order"
+        case measureSetting = "measure_setting"
+        case seriesByUnit = "series_by_unit"
     }
 }
 
@@ -164,20 +170,84 @@ struct Entry: Codable, Identifiable, Equatable {
 struct DailyTotal: Codable, Identifiable, Equatable {
     let localDate: String
     let moduleSlug: String
+    /// The headline unit's number; nil when the day only holds another unit.
     let value: Double?
     let unit: String?
     let entryCount: Int
     let lastAt: String?
+    /// Every unit recorded that day, e.g. ["words": 640, "min": 25].
+    let measures: [String: Double]?
 
     var id: String { "\(localDate)|\(moduleSlug)" }
 
+    /// A day counts as logged if anything was recorded, in whatever unit.
+    var isLogged: Bool { value != nil || entryCount > 0 }
+
     enum CodingKeys: String, CodingKey {
-        case value, unit
+        case value, unit, measures
         case localDate = "local_date"
         case moduleSlug = "module_slug"
         case entryCount = "entry_count"
         case lastAt = "last_at"
     }
+}
+
+// MARK: - Writing
+
+enum WritingMeasure: String, Codable, CaseIterable {
+    case words
+    case min
+
+    var label: String { self == .words ? "Words" : "Minutes" }
+    var short: String { self == .words ? "words" : "min" }
+}
+
+struct WritingProject: Codable, Identifiable, Equatable {
+    let id: String
+    let title: String
+    let kind: String?
+    let measure: String
+    let target: Double?
+    let targetKind: String
+    let status: String
+    let startedOn: String?
+    let finishedOn: String?
+    let position: Int
+
+    var unit: WritingMeasure { WritingMeasure(rawValue: measure) ?? .words }
+    var isActive: Bool { status == "active" }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, kind, measure, target, status, position
+        case targetKind = "target_kind"
+        case startedOn = "started_on"
+        case finishedOn = "finished_on"
+    }
+}
+
+struct WritingProjectTotals: Codable, Equatable {
+    let projectId: String
+    let words: Double
+    let minutes: Double
+    let sessions: Int
+    let lastOn: String?
+
+    enum CodingKeys: String, CodingKey {
+        case words, minutes, sessions
+        case projectId = "project_id"
+        case lastOn = "last_on"
+    }
+}
+
+/// A project with its derived totals folded in.
+struct ProjectWithTotals: Identifiable, Equatable {
+    let project: WritingProject
+    var words: Double = 0
+    var minutes: Double = 0
+    var sessions: Int = 0
+
+    var id: String { project.id }
+    var amount: Double { project.unit == .words ? words : minutes }
 }
 
 struct Book: Codable, Identifiable, Equatable {

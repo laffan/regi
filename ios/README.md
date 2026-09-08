@@ -40,7 +40,8 @@ Sign in with the seeded account — `you@trackalack.test` / `trackalack`.
 - **Calendar (1g, 3b)** — Days is one card per day with a summary line per
   module; Months is six months of three-bar days. Both open with the Ahead band.
 - **Module detail (1h)** — the chart, today's entries, goals and milestones, the
-  API panel, and for Calories the saved meals and source order.
+  API panel, and for Calories the saved meals and source order. Writing adds its
+  projects and the headline-measure switch.
 - **Settings** — Sharing (per-module grants, connections by login email),
   Modules, Account.
 

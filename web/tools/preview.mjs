@@ -86,6 +86,10 @@ function tableFor(url, activeSlugs) {
       return [fx.draft];
     case 'log_draft_rows':
       return fx.draftRows;
+    case 'writing_projects':
+      return fx.writingProjects;
+    case 'writing_project_totals':
+      return fx.writingProjectTotals;
     case 'my_connections':
       return fx.connections;
     default:
@@ -111,6 +115,16 @@ const scenarios = [
   { name: '1f-calendar-days', path: '/calendar', active: ['weight', 'calories', 'reading'] },
   { name: '3a-calendar-months', path: '/calendar', active: ['weight', 'calories', 'reading'], click: 'Months' },
   { name: '1h-module-calories', path: '/module/calories', active: ['weight', 'calories', 'reading'] },
+  {
+    name: 'writing-dashboard',
+    path: '/',
+    active: ['weight', 'calories', 'reading', 'writing'],
+  },
+  {
+    name: 'writing-module',
+    path: '/module/writing',
+    active: ['weight', 'calories', 'reading', 'writing'],
+  },
   { name: '1i-settings-sharing', path: '/settings/sharing', active: ['weight', 'calories', 'reading'] },
 ];
 

@@ -15,15 +15,21 @@ export function GoalsPanel({
   readouts,
   ahead,
   compact,
+  span = 1,
 }: {
   title: string;
   icon?: 'target' | null;
   readouts: GoalReadout[];
   ahead: UpcomingItem[];
   compact?: boolean;
+  /** Columns to fill, so the widget grid never ends on a hole. */
+  span?: number;
 }) {
   return (
-    <div className={compact ? 'wg wg-compact' : 'wg'}>
+    <div
+      className={compact ? 'wg wg-compact' : 'wg'}
+      style={span > 1 ? { gridColumn: `span ${span}` } : undefined}
+    >
       <div className="kickn">
         {icon ? <Icon name={icon} /> : null}
         {title}
