@@ -1,4 +1,4 @@
-# Track-a-Lack
+# Regi
 
 A habit tracker built out of modules. You turn on the ones you want to track;
 each brings its own tools, its own dashboard widgets, and its own line on the

@@ -13,7 +13,7 @@ export function Nav() {
   return (
     <nav className="wnav">
       <NavLink to="/" className="wnav-brand">
-        Track&#8209;a&#8209;Lack
+        Regi
       </NavLink>
       {LINKS.map((link) => (
         <NavLink key={link.to} to={link.to} end={link.to === '/'}>

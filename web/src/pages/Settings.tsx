@@ -415,7 +415,7 @@ function ExportPane() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `track-a-lack-${new Date().toISOString().slice(0, 10)}.json`;
+      link.download = `regi-${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
       URL.revokeObjectURL(url);
     } finally {

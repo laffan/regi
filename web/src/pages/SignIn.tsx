@@ -27,7 +27,7 @@ export function SignIn() {
     <div className="app">
       <div className="sheet sheet-narrow">
         <div className="wnav">
-          <span className="wnav-brand">Track&#8209;a&#8209;Lack</span>
+          <span className="wnav-brand">Regi</span>
         </div>
 
         <div style={{ padding: '32px 20px', background: 'var(--color-bg)', minHeight: '60vh' }}>

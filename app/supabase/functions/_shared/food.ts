@@ -27,7 +27,7 @@ export interface PricedItem {
   matched_name: string | null;
 }
 
-const USER_AGENT = 'TrackALack/0.1 (habit tracker; contact via repo laffan/track-a-lack)';
+const USER_AGENT = 'Regi/0.1 (habit tracker; contact via repo laffan/regi)';
 const CACHE_DAYS = 30;
 
 // ── portions ────────────────────────────────────────────────────────────────

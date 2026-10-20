@@ -13,7 +13,7 @@ struct SignInView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Track-a-Lack")
+            Text("Regi")
                 .font(Theme.heading(17))
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
