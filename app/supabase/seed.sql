@@ -4,40 +4,48 @@
 --   you@trackalack.test / trackalack   ← the account in every screenshot
 --   marcus@example.com, priya@example.com, jules@example.com (same password)
 --
--- "Today" is 2026-09-07, the Monday the designs show. Weight and Calories carry
--- ~13 weeks; Reading covers two books.
+-- The designs were drawn on Monday 2026-09-07. The seed lands that day's numbers
+-- on whatever day it runs (Pacific time), and moves every other date by the same
+-- amount, so the demo always opens on a full current week. Weight and Calories
+-- carry ~13 weeks; Reading covers two books.
+
+-- Hosted projects keep pgcrypto (crypt, gen_salt) in the extensions schema.
+set search_path = public, extensions;
 
 -- ── accounts ────────────────────────────────────────────────────────────────
+-- The token columns are empty strings, not nulls: Supabase Auth cannot read a
+-- user whose tokens are null, and the sign-in fails with "Database error".
 insert into auth.users
   (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
-   raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+   raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+   confirmation_token, recovery_token, email_change, email_change_token_new)
 values
   ('00000000-0000-0000-0000-000000000000', 'a0000000-0000-4000-8000-000000000001',
    'authenticated', 'authenticated', 'you@trackalack.test',
    crypt('trackalack', gen_salt('bf')), now(),
    '{"provider":"email","providers":["email"]}', '{"display_name":"Nick Laffan"}',
-   '2026-06-01', now()),
+   now() - interval '98 days', now(), '', '', '', ''),
   ('00000000-0000-0000-0000-000000000000', 'a0000000-0000-4000-8000-000000000002',
    'authenticated', 'authenticated', 'marcus@example.com',
    crypt('trackalack', gen_salt('bf')), now(),
    '{"provider":"email","providers":["email"]}', '{"display_name":"Marcus Reid"}',
-   '2026-06-04', now()),
+   now() - interval '95 days', now(), '', '', '', ''),
   ('00000000-0000-0000-0000-000000000000', 'a0000000-0000-4000-8000-000000000003',
    'authenticated', 'authenticated', 'priya@example.com',
    crypt('trackalack', gen_salt('bf')), now(),
    '{"provider":"email","providers":["email"]}', '{"display_name":"Priya Raman"}',
-   '2026-06-11', now()),
+   now() - interval '88 days', now(), '', '', '', ''),
   ('00000000-0000-0000-0000-000000000000', 'a0000000-0000-4000-8000-000000000004',
    'authenticated', 'authenticated', 'jules@example.com',
    crypt('trackalack', gen_salt('bf')), now(),
    '{"provider":"email","providers":["email"]}', '{"display_name":"Jules Ortega"}',
-   '2026-07-02', now())
+   now() - interval '67 days', now(), '', '', '', '')
 on conflict (id) do nothing;
 
 insert into auth.identities
-  (id, user_id, provider_id, provider, identity_data, last_sign_in_at, created_at, updated_at)
+  (user_id, provider_id, provider, identity_data, last_sign_in_at, created_at, updated_at)
 select
-  u.id::text, u.id, u.id::text, 'email',
+  u.id, u.id::text, 'email',
   jsonb_build_object('sub', u.id::text, 'email', u.email, 'email_verified', true),
   now(), now(), now()
 from auth.users u
@@ -94,7 +102,9 @@ declare
   marcus  uuid := 'a0000000-0000-4000-8000-000000000002';
   priya   uuid := 'a0000000-0000-4000-8000-000000000003';
   jules   uuid := 'a0000000-0000-4000-8000-000000000004';
-  today   date := date '2026-09-07';
+  today   date := (now() at time zone 'America/Los_Angeles')::date;
+  -- How far the designed dates move: add it to any date written below.
+  shift   int  := today - date '2026-09-07';
 
   overstory uuid;
   piranesi  uuid;
@@ -144,11 +154,11 @@ begin
 
   -- ── books ────────────────────────────────────────────────────────────────
   insert into public.books (user_id, title, author, total_pages, current_page, status, started_on, finished_on)
-  values (me, 'Piranesi', 'Susanna Clarke', 272, 272, 'finished', '2026-08-01', '2026-08-22')
+  values (me, 'Piranesi', 'Susanna Clarke', 272, 272, 'finished', (date '2026-08-01' + shift), (date '2026-08-22' + shift))
   returning id into piranesi;
 
   insert into public.books (user_id, title, author, total_pages, current_page, status, started_on)
-  values (me, 'The Overstory', 'Richard Powers', 502, 0, 'reading', '2026-08-24')
+  values (me, 'The Overstory', 'Richard Powers', 502, 0, 'reading', (date '2026-08-24' + shift))
   returning id into overstory;
 
   -- ── weight and calories, 13 weeks ────────────────────────────────────────
@@ -179,10 +189,10 @@ begin
 
   -- ── reading: Piranesi, then The Overstory ────────────────────────────────
   page_at := 0;
-  d := date '2026-08-01';
-  while d <= date '2026-08-22' loop
+  d := (date '2026-08-01' + shift);
+  while d <= (date '2026-08-22' + shift) loop
     pages := case when (extract(doy from d)::int % 7) in (2, 5) then 0 else 10 + (extract(doy from d)::int % 19) end;
-    if d = date '2026-08-22' then
+    if d = (date '2026-08-22' + shift) then
       pages := 272 - page_at;             -- finish the book on the last night
     else
       pages := least(pages, 272 - page_at); -- and never read past its last page
@@ -199,7 +209,7 @@ begin
   -- The Overstory reaches p.190 by 2 September, so today's 24 pages land on 214.
   page_at := 0;
   for i in 0..9 loop
-    d := date '2026-08-24' + i;
+    d := (date '2026-08-24' + shift) + i;
     pages := (array[8, 12, 0, 24, 6, 0, 0, 9, 7, 6])[i + 1];
     if pages > 0 then
       page_at := page_at + pages;
@@ -285,15 +295,15 @@ begin
   -- of sessions are already there: a novel counted in words, morning pages
   -- counted in minutes.
   insert into public.writing_projects (user_id, title, kind, measure, target, target_kind, status, started_on, position)
-  values (me, 'The Lantern Room', 'Novel', 'words', 50000, 'total', 'active', '2026-08-03', 10)
+  values (me, 'The Lantern Room', 'Novel', 'words', 50000, 'total', 'active', (date '2026-08-03' + shift), 10)
   returning id into novel;
 
   insert into public.writing_projects (user_id, title, kind, measure, target, target_kind, status, started_on, position)
-  values (me, 'Morning pages', 'Journal', 'min', 30, 'daily', 'active', '2026-07-20', 20)
+  values (me, 'Morning pages', 'Journal', 'min', 30, 'daily', 'active', (date '2026-07-20' + shift), 20)
   returning id into morning_page;
 
   insert into public.writing_projects (user_id, title, kind, measure, target, target_kind, status, started_on, finished_on)
-  values (me, 'Conference talk', 'Talk', 'words', 3000, 'total', 'finished', '2026-06-15', '2026-07-02');
+  values (me, 'Conference talk', 'Talk', 'words', 3000, 'total', 'finished', (date '2026-06-15' + shift), (date '2026-07-02' + shift));
 
   for i in 0..34 loop
     d := today - 34 + i;
@@ -343,13 +353,13 @@ begin
     (me, 'calories', 'goal',      'Under 2,200 kcal daily',      'calories.daily', 2200, '<=', 'daily',  null, null),
     (me, 'calories', 'goal',      'Log every meal',              'calories.meals', null, null, 'daily',  null, null),
     (me, 'weight',   'goal',      'Log daily',                   'weight.daily',   null, null, 'daily',  null, null),
-    (me, 'weight',   'goal',      'Weight check-in',             'weight.daily',   null, null, 'weekly', date '2026-09-14', null),
+    (me, 'weight',   'goal',      'Weight check-in',             'weight.daily',   null, null, 'weekly', (date '2026-09-14' + shift), null),
     (me, 'reading',  'goal',      '30 pages daily',              'reading.pages',    30, '>=', 'daily',  null, null),
-    (me, 'weight',   'milestone', '180.0 lb',                    'weight.daily',    180, '<=', 'once',   date '2026-09-24', null),
-    (me, 'calories', 'milestone', '30-day mean under 1,900',     'calories.daily', 1900, '<=', 'once',   date '2026-10-07', null),
-    (me, 'reading',  'milestone', 'Finish The Overstory',        'reading.pages',   502, '>=', 'once',   date '2026-09-30', null),
-    (me, 'reading',  'milestone', '5-day reading streak',        'reading.pages',     5, '>=', 'once',   date '2026-09-04',
-     timestamptz '2026-09-04 22:05'),
+    (me, 'weight',   'milestone', '180.0 lb',                    'weight.daily',    180, '<=', 'once',   (date '2026-09-24' + shift), null),
+    (me, 'calories', 'milestone', '30-day mean under 1,900',     'calories.daily', 1900, '<=', 'once',   (date '2026-10-07' + shift), null),
+    (me, 'reading',  'milestone', 'Finish The Overstory',        'reading.pages',   502, '>=', 'once',   (date '2026-09-30' + shift), null),
+    (me, 'reading',  'milestone', '5-day reading streak',        'reading.pages',     5, '>=', 'once',   (date '2026-09-04' + shift),
+     (date '2026-09-04' + shift) + time '22:05'),
     (me, 'writing',  'goal',      '750 words daily',             'writing.words',   750, '>=', 'daily',  null, null),
     (me, 'writing',  'goal',      '30 minutes of pages',         'writing.minutes',  30, '>=', 'daily',  null, null);
 
