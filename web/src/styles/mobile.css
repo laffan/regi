@@ -1,0 +1,194 @@
+/* Phones.
+ *
+ * The same system, re-set for a narrow column rather than shrunk: one column
+ * of widgets, the same hairlines and flush-left type, the big numbers still
+ * big. The changes are the ones a thumb and a 390px screen need:
+ *
+ *   · 16px text in fields, so iOS does not zoom the page on focus
+ *   · 44px targets for anything tapped often
+ *   · tables re-flowed into rows that read top to bottom, or scrolled
+ *     sideways where the columns are the point
+ *   · dialogs and the Log's summary as bottom sheets
+ *
+ * Breakpoint 640px; app.css already stacks the Log, the months grid and the
+ * settings nav from 900px.
+ */
+
+@media (max-width: 640px) {
+  /* — frame — a slim margin, so the sheet still reads as a sheet — */
+  .sheet,
+  .sheet-narrow {
+    max-width: calc(100% - 12px);
+  }
+  .pad { padding: 14px 16px; }
+
+  /* The nav stays put while the page scrolls under it. */
+  .wnav {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    gap: 16px;
+    padding: 12px 16px;
+  }
+  .wnav a { font-size: 13px; }
+  .wnav-brand { font-size: 16px; }
+
+  h2 { font-size: 26px; }
+  h3 { font-size: 22px; }
+  h4 { font-size: 18px; }
+
+  /* — fields and buttons — */
+  .input,
+  select.input,
+  textarea.input { font-size: 16px; min-height: 44px; }
+  .btn { min-height: 40px; }
+  .qinput .input,
+  .qinput .btn,
+  .qinput .log-voice { min-height: 46px !important; }
+  .qinput .btn { padding-inline: 14px; font-size: 14px; }
+  .qcheck { font-size: 13.5px; padding: 4px 0; }
+  .qcheck input { width: 18px; height: 18px; }
+  .chip { min-height: 38px; padding: 6px 12px; }
+  .chip-group .chip-kcal { min-width: 48px; }
+
+  /* — dashboard — */
+  .dash-title { font-size: 18px; }
+  .wgrid-dash { grid-template-columns: minmax(0, 1fr) !important; }
+  .wgrid-dash > .wcell { grid-column: auto !important; }
+  .wg,
+  .wg-compact { padding: 16px; gap: 12px; }
+  .big { font-size: 40px; }
+  .wg-compact .big { font-size: 40px !important; }
+
+  /* The week strip keeps seven days across; each day just sets tighter. */
+  .wk > * { padding: 8px 6px 10px; }
+  .dow { font-size: 9px; letter-spacing: 0.08em; }
+  .dnum { font-size: 20px; margin-top: 3px; }
+  .mrow { gap: 2px; margin-top: 8px; }
+  .mdot { height: 4px; }
+
+  .mealbar { height: 14px; }
+  .mealseg { min-width: 8px; }
+  .macro-key { gap: 4px 10px; font-size: 11.5px; }
+  .mtip { max-width: 70vw; }
+
+  /* — the Log — */
+  .log-input { padding: 14px 16px; }
+  .log-list { padding: 16px 16px 24px; }
+  .log-input-row .input { min-height: 46px; }
+  .review-head { padding: 14px 16px; }
+
+  /* Each entry is a row of three: time, what it was, how much — with its
+   * module, macros and Edit tucked under rather than in columns of their own. */
+  .log-table,
+  .log-table tbody { display: block; }
+  .log-table colgroup,
+  .log-table thead { display: none; }
+  .log-table tr {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    grid-template-areas: 'time entry value' 'time module edit';
+    column-gap: 10px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .log-table td { padding: 0; border: 0; }
+  .log-table td:nth-child(1) { grid-area: time; font-size: 12.5px; padding-top: 2px; }
+  .log-table td:nth-child(2) { grid-area: entry; min-width: 0; }
+  .log-table td:nth-child(3) { grid-area: module; padding-top: 6px; }
+  .log-table td:nth-child(3) .tag { padding: 2px 8px; }
+  .log-table td:nth-child(4) { grid-area: value; text-align: right; }
+  .log-table td:nth-child(5) { grid-area: edit; text-align: right !important; padding-top: 4px; }
+  .log-table td[colspan] { grid-column: 1 / -1; }
+  .log-table .row-edit { opacity: 1; min-height: 32px; }
+  .log-table td:nth-child(4) .macrobar { min-width: 72px; }
+  .log-row.selected { background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
+  .log-row.selected > td { background: none; }
+
+  /* Review and edit forms: name on its own line, portion and kcal beside. */
+  .draft { padding: 12px; }
+  .draft-row { flex-wrap: wrap; }
+  .item-edit .draft-row > .input:first-child { flex: 1 1 100% !important; }
+  .item-edit .draft-row .input.portion { flex: 1; width: auto; }
+  .item-edit .draft-row .input.kcal { width: 96px; }
+  .macro-inputs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* — calendar — */
+  .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .seg::-webkit-scrollbar { display: none; }
+  .seg-opt { padding: 8px 11px; }
+  .dl { gap: 12px; padding: 14px 16px; }
+  .dl-date { width: 40px; }
+  .dl .dnum { font-size: 22px; }
+  .sumrow { flex-wrap: wrap; row-gap: 3px; }
+  .sumrow .sum-mod { width: 96px; }
+  .sumrow .sum-bars { min-width: 72px; }
+  .sumrow .sum-note { flex-basis: 100%; padding-left: 104px; font-size: 11.5px; }
+  .months { grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .legend { padding: 9px 16px; }
+
+  /* — module page — */
+  .md-grid { grid-template-columns: minmax(0, 1fr); }
+  .md-main { border-right: 0; border-bottom: 1px solid var(--line); }
+
+  /* — settings — */
+  .settings-body { padding: 16px; }
+  .settings-nav a { padding: 10px 14px; white-space: nowrap; }
+  .swatches { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mod-row-head { flex-wrap: wrap; row-gap: 6px; }
+  .mod-opts { margin-left: 0; }
+  .mod-opts .opt > .opt-label { width: 100%; }
+
+  /* Connections read as cards: who, then what flows each way, then actions. */
+  .conn-table,
+  .conn-table tbody { display: block; }
+  .conn-table thead { display: none; }
+  .conn-table tr.conn-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .conn-table tr.conn-row > td { padding: 0; border: 0; }
+  .conn-table tr.conn-row > td.conn-person { grid-column: 1; grid-row: 1; }
+  .conn-table tr.conn-row > td.conn-actions { grid-column: 2; grid-row: 1; }
+  .conn-table tr.conn-row > td[data-label] { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 5px; }
+  .conn-table tr.conn-row > td[data-label]::before {
+    content: attr(data-label);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.55;
+  }
+  .conn-table tr.conn-detail { display: block; }
+  .conn-table tr.conn-detail > td { display: block; padding: 12px !important; }
+  .share-grid,
+  .share-grid tbody { display: block; }
+  .share-grid thead { display: none; }
+  .share-grid tr { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-top: 1px solid var(--line); }
+  .share-grid td { padding: 0; border: 0; }
+  .share-grid .seg { width: 100%; }
+  .share-grid .seg-opt { flex: 1; justify-content: center; }
+
+  /* — dialogs become bottom sheets — */
+  .dialog-backdrop { place-items: end center; padding: 0; }
+  .dialog {
+    width: 100% !important;
+    max-height: 92vh;
+    overflow-y: auto;
+    padding: 18px 16px calc(16px + env(safe-area-inset-bottom));
+    box-shadow: var(--shadow-lg);
+  }
+  .dialog-title { font-size: 18px; }
+  .dialog-actions { flex-wrap: wrap; }
+  .dialog-actions .btn { min-height: 44px; }
+  .icon-grid { grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); max-height: 220px; }
+}
+
+/* Very narrow phones (SE, folded): the strip drops its weekday names. */
+@media (max-width: 360px) {
+  .wk .dow { font-size: 8px; letter-spacing: 0.04em; }
+  .wnav { gap: 12px; }
+  .wnav a { font-size: 12.5px; }
+}

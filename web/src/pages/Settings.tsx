@@ -178,7 +178,7 @@ function SharingPane() {
         </span>
       </div>
 
-      <table className="table" style={{ marginTop: 8 }}>
+      <table className="table conn-table" style={{ marginTop: 8 }}>
         <thead>
           <tr>
             <th>Person</th>
@@ -197,13 +197,13 @@ function SharingPane() {
 
             return (
               <Fragment key={row.id}>
-                <tr>
-                  <td>
+                <tr className="conn-row">
+                  <td className="conn-person">
                     <div style={{ fontWeight: 800 }}>{row.person?.display_name ?? 'Unknown'}</div>
                     <div style={{ fontSize: 11.5, opacity: 0.55 }}>{row.person?.email}</div>
                   </td>
 
-                  <td>
+                  <td data-label="Shares with you">
                     {row.status === 'pending' ? (
                       <span style={{ opacity: 0.5 }}>{incoming ? 'Wants to connect' : 'Awaiting reply'}</span>
                     ) : row.they_share.length ? (
@@ -226,7 +226,7 @@ function SharingPane() {
                     )}
                   </td>
 
-                  <td>
+                  <td data-label="You share">
                     {row.status === 'pending' ? (
                       <span className="tag tag-outline">Pending</span>
                     ) : row.i_share.length ? (
@@ -244,7 +244,7 @@ function SharingPane() {
                     )}
                   </td>
 
-                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <td className="conn-actions" style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     {incoming ? (
                       <>
                         <button type="button" className="btn btn-ghost" onClick={() => respond.mutate({ id: row.id, accept: true })}>
@@ -272,7 +272,7 @@ function SharingPane() {
                 </tr>
 
                 {isOpen ? (
-                  <tr>
+                  <tr className="conn-detail">
                     <td colSpan={4} style={{ background: 'var(--warm)', padding: '10px 12px 14px' }}>
                       <table className="share-grid">
                         <thead>

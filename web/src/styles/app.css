@@ -294,9 +294,19 @@ a.src:hover { text-decoration: underline; }
 .mday-bars > span.on { background: currentColor; }
 
 /* — log — */
-.log-split { display: grid; grid-template-columns: minmax(0, 1fr) 420px; min-height: 620px; }
-.log-main { display: flex; flex-direction: column; border-right: 1px solid var(--line); background: var(--color-bg); }
-.log-input { padding: 16px 20px; border-bottom: 1px solid var(--line); background: var(--warm); }
+/* The Log is three areas — the input line, the list, the review column — so a
+ * narrow screen can stack them input, review, list without moving markup. */
+.log-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  grid-template-rows: auto 1fr;
+  grid-template-areas: 'input review' 'list review';
+  min-height: 620px;
+}
+.log-main { display: contents; }
+.log-split > .review { grid-area: review; }
+.log-list { grid-area: list; padding: 20px 20px 24px; border-right: 1px solid var(--line); background: var(--color-bg); }
+.log-input { grid-area: input; padding: 16px 20px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); background: var(--warm); }
 .log-input-row { display: flex; gap: 8px; position: relative; }
 .review { display: flex; flex-direction: column; background: var(--warm); }
 .review-head {
@@ -404,8 +414,24 @@ a.src:hover { text-decoration: underline; }
 .pad { padding: 14px 20px; }
 
 @media (max-width: 900px) {
-  .log-split { grid-template-columns: minmax(0, 1fr); }
-  .log-main { border-right: 0; }
+  .log-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; grid-template-areas: 'input' 'review' 'list'; min-height: 0; }
+  .log-input, .log-list { border-right: 0; }
+  /* Nothing waiting: the column would only explain itself, so it steps aside. */
+  .log-split > .review.idle { display: none; }
+  .log-split > .review:not(.summary) { border-bottom: 1px solid var(--line); }
+  /* An entry's summary rises from the bottom instead of waiting below the list. */
+  .log-split > .review.summary {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    max-height: 78vh;
+    overflow-y: auto;
+    border-top: 1px solid var(--line);
+    box-shadow: var(--shadow-lg);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
   .months { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .settings { grid-template-columns: minmax(0, 1fr); }
   .settings-nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
@@ -462,3 +488,9 @@ a.src:hover { text-decoration: underline; }
 .log-row:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 .summary-items { display: flex; flex-direction: column; }
 .summary-item { display: flex; flex-direction: column; gap: 3px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13px; }
+
+/* — layout hooks the pages use instead of inline grid styles — */
+.wgrid-dash { grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); }
+.md-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; }
+.md-main { border-right: 1px solid var(--line); background: var(--color-bg); min-width: 0; }
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }

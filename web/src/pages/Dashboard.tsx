@@ -126,7 +126,7 @@ export function Dashboard() {
         onSelect={(date) => setPicked(date === today || date === picked ? null : date)}
       />
 
-      <div className="wgrid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+      <div className="wgrid wgrid-dash" style={{ ['--cols' as string]: columns }}>
         {active.map((m, i) => {
           const Widget = widgetFor(m.slug, m.kind);
           const span = spanOf(i);

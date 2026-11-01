@@ -308,7 +308,9 @@ function DayRow({
                 </span>
               ) : null}
               {summary.note ? (
-                <span style={summary.over ? { color: 'var(--color-accent-700)' } : { opacity: 0.5 }}>{summary.note}</span>
+                <span className="sum-note" style={summary.over ? { color: 'var(--color-accent-700)' } : { opacity: 0.5 }}>
+                  {summary.note}
+                </span>
               ) : null}
             </div>
           );

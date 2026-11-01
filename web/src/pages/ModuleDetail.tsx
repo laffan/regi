@@ -127,8 +127,8 @@ export function ModuleDetail() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px' }}>
-        <div style={{ borderRight: '1px solid var(--line)', background: 'var(--color-bg)' }}>
+      <div className="md-grid">
+        <div className="md-main">
           <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--line)' }}>
             <div className="row-between">
               <h4 style={{ margin: 0 }}>{pair ? pair.title : `${def.name} over time`}</h4>
@@ -180,7 +180,8 @@ export function ModuleDetail() {
                     <MacroBar items={todayEntries.flatMap((e) => (e.items ?? []) as MealItem[])} target={calorieTarget} />
                   </div>
                 ) : null}
-                <table className="table" style={{ marginTop: 8 }}>
+                <div className="table-scroll">
+                <table className="table" style={{ marginTop: 8, minWidth: 600 }}>
                   <thead>
                     <tr>
                       <th>Time</th>
@@ -233,6 +234,7 @@ export function ModuleDetail() {
                     )}
                   </tbody>
                 </table>
+                </div>
               </>
             ) : (
               <table className="table" style={{ marginTop: 8 }}>

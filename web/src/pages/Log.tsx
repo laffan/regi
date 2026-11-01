@@ -136,7 +136,7 @@ export function LogPage() {
             One line, any modules — typed or spoken. Parsed on the server, then shown for review.
           </div>
         </div>
-        <div style={{ flex: 1, padding: '20px 20px 24px' }}>
+        <div className="log-list">
           {entries.isLoading ? <div className="spinner">Loading entries…</div> : null}
 
           {byDay.map(([date, list], index) => (
@@ -168,7 +168,7 @@ export function LogPage() {
 
               {/* Fixed widths so every day's table lines up with the one above,
                   header row or not. */}
-              <table className="table" style={{ marginTop: 8, tableLayout: 'fixed' }}>
+              <table className="table log-table" style={{ marginTop: 8, tableLayout: 'fixed' }}>
                 <colgroup>
                   <col style={{ width: 70 }} />
                   <col />
@@ -344,7 +344,7 @@ function ReviewColumn({
 
   if (nothing) {
     return (
-      <div className="review">
+      <div className="review idle">
         <div className="review-head">
           <div>
             <div className="kick">Review</div>
@@ -560,7 +560,7 @@ function EntrySummary({ entry, onEdit, onClose }: { entry: Entry; onEdit: () => 
   const seconds = Number(entry.payload?.duration_s ?? 0);
 
   return (
-    <div className="review">
+    <div className="review summary" role="dialog" aria-label="Entry summary">
       <div className="review-head">
         <div style={{ minWidth: 0 }}>
           <div className="kick">

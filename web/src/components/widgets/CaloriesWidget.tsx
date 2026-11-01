@@ -132,7 +132,8 @@ function MealBar({ meals, remaining, compact }: { meals: Entry[]; remaining: num
       ))}
       {remaining > 0 ? <span className="rest" style={{ flex: remaining }} /> : null}
       {tip && shown !== null ? (
-        <div className="mtip" role="tooltip" style={{ left: `${centre(shown)}%` }}>
+        // Kept off the edges so it never runs past a narrow screen.
+        <div className="mtip" role="tooltip" style={{ left: `${Math.min(Math.max(centre(shown), 20), 80)}%` }}>
           <b>{tip.label ?? 'Food'}</b>
           <span>
             {group(tip.value ?? 0)} kcal · {timeOfDay(tip.occurred_at)}

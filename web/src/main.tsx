@@ -6,6 +6,7 @@ import { AuthProvider } from '@/data/auth';
 import { App } from './App';
 import './styles/tokens.css';
 import './styles/app.css';
+import './styles/mobile.css';
 import { applyStoredAccent } from '@/lib/theme';
 
 // The last highlight this browser saw, so the first paint is already right;
