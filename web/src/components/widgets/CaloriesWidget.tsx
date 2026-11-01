@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Icon } from '@/components/Icon';
 import { MacroBar } from '@/components/Nutrition';
@@ -6,7 +7,8 @@ import { QuickInput } from './QuickInput';
 import { useLogSavedMeal, useParseLog, useSetDayClosed } from '@/data/hooks';
 import { totalKey } from '@/components/WeekStrip';
 import { group } from '@/lib/format';
-import type { MealItem } from '@/lib/types';
+import { timeOfDay } from '@/lib/dates';
+import type { Entry, MealItem } from '@/lib/types';
 import type { WidgetProps } from './types';
 
 const DEFAULT_TARGET = 2200;
@@ -80,12 +82,7 @@ export function CaloriesWidget({ compact, today, when, totals, entries, settings
       </div>
 
       {/* The day's intake, one segment per entry, then the shortfall… */}
-      <div className="mealbar" style={compact ? { height: 10 } : undefined}>
-        {[...meals].reverse().map((meal) => (
-          <span key={meal.id} style={{ flex: Math.max(meal.value ?? 0, 1) }} title={meal.label ?? ''} />
-        ))}
-        {remaining > 0 ? <span className="rest" style={{ flex: remaining }} /> : null}
-      </div>
+      <MealBar meals={[...meals].reverse()} remaining={remaining} compact={compact} />
       {/* …and the macros on the same scale beneath it. */}
       <MacroBar items={items} target={target} />
 
@@ -99,6 +96,47 @@ export function CaloriesWidget({ compact, today, when, totals, entries, settings
               onAdd={() => quickAdd.mutate({ id: meal.id, when })}
             />
           ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * One segment per entry, in the order eaten. Hovering or focusing a segment
+ * shows what it was; clicking opens that entry in the Log.
+ */
+function MealBar({ meals, remaining, compact }: { meals: Entry[]; remaining: number; compact: boolean }) {
+  const navigate = useNavigate();
+  const [shown, setShown] = useState<number | null>(null);
+
+  const values = meals.map((m) => Math.max(m.value ?? 0, 1));
+  const total = values.reduce((a, b) => a + b, 0) + remaining;
+  const centre = (i: number) => ((values.slice(0, i).reduce((a, b) => a + b, 0) + values[i] / 2) / (total || 1)) * 100;
+  const tip = shown !== null ? meals[shown] : null;
+
+  return (
+    <div className="mealbar" style={compact ? { height: 10 } : undefined} onMouseLeave={() => setShown(null)}>
+      {meals.map((meal, i) => (
+        <button
+          key={meal.id}
+          type="button"
+          className="mealseg"
+          style={{ flex: values[i] }}
+          aria-label={`${meal.label ?? 'Food'}, ${group(meal.value ?? 0)} kcal at ${timeOfDay(meal.occurred_at)} — open in the Log`}
+          onMouseEnter={() => setShown(i)}
+          onFocus={() => setShown(i)}
+          onBlur={() => setShown(null)}
+          onClick={() => navigate(`/log?entry=${meal.id}`)}
+        />
+      ))}
+      {remaining > 0 ? <span className="rest" style={{ flex: remaining }} /> : null}
+      {tip && shown !== null ? (
+        <div className="mtip" role="tooltip" style={{ left: `${centre(shown)}%` }}>
+          <b>{tip.label ?? 'Food'}</b>
+          <span>
+            {group(tip.value ?? 0)} kcal · {timeOfDay(tip.occurred_at)}
+          </span>
         </div>
       ) : null}
     </div>

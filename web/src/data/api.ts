@@ -201,6 +201,34 @@ export async function getSharedTotals(fromISO: string, toISO: string): Promise<S
   return (data ?? []) as SharedDayTotal[];
 }
 
+/** Each day's macros, summed on the server, for the calendar's mini bars. */
+export interface DailyMacros {
+  local_date: string;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+  items: number;
+  items_with_macros: number;
+}
+
+export async function getDailyMacros(fromISO: string, toISO: string): Promise<DailyMacros[]> {
+  const { data, error } = await supabase
+    .from('daily_macro_totals')
+    .select('local_date, protein_g, carbs_g, fat_g, fiber_g, items, items_with_macros')
+    .eq('user_id', await myId())
+    .gte('local_date', fromISO)
+    .lte('local_date', toISO);
+  if (error) throw error;
+  return ((data ?? []) as DailyMacros[]).map((r) => ({
+    ...r,
+    protein_g: Number(r.protein_g),
+    carbs_g: Number(r.carbs_g),
+    fat_g: Number(r.fat_g),
+    fiber_g: Number(r.fiber_g),
+  }));
+}
+
 export async function getDayClosures(fromISO: string, toISO: string): Promise<DayClosure[]> {
   const { data, error } = await supabase
     .from('day_closures')

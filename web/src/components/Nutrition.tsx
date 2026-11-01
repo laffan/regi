@@ -15,6 +15,7 @@ import {
   sourceSummary,
   sumMacros,
   type MacroKey,
+  type MacroTotals,
 } from '@/lib/nutrition';
 import type { MealItem } from '@/lib/types';
 
@@ -56,11 +57,14 @@ export function SourceSummary({ items }: { items: MealItem[] }) {
  */
 export function MacroBar({
   items,
+  totals: given,
   target,
   showKey = true,
   height,
 }: {
-  items: MealItem[];
+  items?: MealItem[];
+  /** Already-summed macros (the calendar's per-day rollup), instead of items. */
+  totals?: MacroTotals;
   /** The energy the full width stands for: the day's target on the dashboard,
    *  the entry's own kcal in the Log. */
   target: number;
@@ -68,7 +72,7 @@ export function MacroBar({
   /** The Log draws a 3px rule under the number; the dashboard its own height. */
   height?: number;
 }) {
-  const totals = sumMacros(items);
+  const totals = given ?? sumMacros(items ?? []);
   const energy = macroEnergy(totals.grams);
   const scale = Math.max(target, Object.values(energy).reduce((a, b) => a + b, 0), 1);
 

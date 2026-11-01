@@ -84,6 +84,8 @@ function tableFor(url, activeSlugs) {
       const kind = url.searchParams.get('kind')?.slice(3);
       return kind ? fx.goals.filter((g) => g.kind === kind) : fx.goals;
     }
+    case 'daily_macro_totals':
+      return fx.dailyMacros();
     case 'day_closures':
       return fx.dayClosures;
     case 'log_drafts':
@@ -173,6 +175,25 @@ const scenarios = [
     run: async (page) => {
       await page.getByRole('button', { name: /^Edit Yogurt/ }).click();
       await page.getByRole('button', { name: 'Add as Saved Combination' }).click();
+    },
+  },
+  // Fourth round.
+  {
+    name: 'fb4-mealbar-tooltip',
+    path: '/',
+    active: ['weight', 'calories', 'reading'],
+    run: async (page) => {
+      await page.locator('.mealseg').nth(1).hover();
+    },
+  },
+  {
+    name: 'fb4-mealbar-to-log',
+    path: '/',
+    active: ['weight', 'calories', 'reading'],
+    run: async (page) => {
+      await page.locator('.mealseg').nth(1).click();
+      await page.waitForURL('**/log');
+      await page.waitForTimeout(300);
     },
   },
   {

@@ -321,4 +321,22 @@ export function sharedTotals() {
 export const dayClosures = [{ module_slug: 'calories', local_date: yesterday, closed_at: iso(yesterday, '20:30') }];
 
 // The schema the fixtures stand for; matches web/src/lib/schema.ts.
-export const SCHEMA_VERSION = '20261104000100';
+export const SCHEMA_VERSION = '20261105000100';
+
+// Per-day macros for the calendar's mini bars (the daily_macro_totals view).
+export function dailyMacros() {
+  const rows = [];
+  for (let back = 0; back < 30; back++) {
+    if (back % 6 === 5) continue; // some days carry no macros
+    rows.push({
+      local_date: daysAgo(back),
+      protein_g: 70 + ((back * 13) % 40),
+      carbs_g: 170 + ((back * 29) % 80),
+      fat_g: 50 + ((back * 7) % 30),
+      fiber_g: 18 + ((back * 5) % 12),
+      items: 8,
+      items_with_macros: back % 4 === 0 ? 6 : 8,
+    });
+  }
+  return rows;
+}

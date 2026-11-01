@@ -392,6 +392,16 @@ begin
 end
 $$;
 
+-- Per-day macros: the eggs approved above (12 g protein) land in the rollup.
+do $$
+begin
+  if (select protein_g from public.daily_macro_totals
+       where user_id = auth.uid() and local_date = date '2026-09-08') < 12 then
+    raise exception 'daily_macro_totals missed the day''s protein';
+  end if;
+end
+$$;
+
 -- Closing a day.
 insert into public.day_closures (user_id, module_slug, local_date) values (auth.uid(), 'calories', '2026-09-08');
 

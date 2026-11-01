@@ -131,10 +131,6 @@ export function Dashboard() {
             </button>
           </h4>
         )}
-        <span style={{ fontSize: 11.5, opacity: 0.55 }}>
-          {count} module{count === 1 ? '' : 's'} active
-          {count <= 3 ? ` · ${defs.map((d) => d.name).join(', ')}` : ' · compact widgets'}
-        </span>
       </div>
 
       <WeekStrip

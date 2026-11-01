@@ -8,10 +8,13 @@
 
 import { useMemo, useState } from 'react';
 import { Icon } from '@/components/Icon';
+import { MacroBar } from '@/components/Nutrition';
+import type { MacroTotals } from '@/lib/nutrition';
 import { fillStyle, indexTotals, loggedOn, totalKey } from '@/components/WeekStrip';
 import {
   useBooks,
   useConnections,
+  useDailyMacros,
   useDailyTotals,
   useDayClosures,
   useGoals,
@@ -58,6 +61,19 @@ export function CalendarPage() {
   const closures = useDayClosures(from, today);
   const connections = useConnections();
   const shared = useSharedTotals(from, today, view === 'days');
+  const macros = useDailyMacros(from, today);
+
+  const macrosByDay = useMemo(() => {
+    const map = new Map<string, MacroTotals>();
+    for (const r of macros.data ?? []) {
+      map.set(r.local_date, {
+        grams: { protein_g: r.protein_g, carbs_g: r.carbs_g, fat_g: r.fat_g, fiber_g: r.fiber_g },
+        known: r.items_with_macros,
+        of: r.items,
+      });
+    }
+    return map;
+  }, [macros.data]);
 
   const totalsIndex = useMemo(() => indexTotals(totals.data), [totals.data]);
 
@@ -186,6 +202,7 @@ export function CalendarPage() {
               ctx={dayCtx}
               shared={showShared ? (sharedByDay.get(date) ?? []).filter((r) => filter === 'all' || r.module_slug === filter) : []}
               names={names}
+              macros={macrosByDay.get(date) ?? null}
             />
           ))}
           <div style={{ padding: '14px 16px', background: 'var(--color-bg)' }}>
@@ -241,6 +258,7 @@ function DayRow({
   ctx,
   shared,
   names,
+  macros,
 }: {
   date: string;
   today: string;
@@ -249,6 +267,8 @@ function DayRow({
   ctx: Parameters<ModuleDef['daySummary']>[1];
   shared: SharedDayTotal[];
   names: Map<string, string>;
+  /** The day's macros, for the mini bar under the calorie bar. */
+  macros: MacroTotals | null;
 }) {
   const isToday = date === today;
 
@@ -277,8 +297,14 @@ function DayRow({
                 <b>{summary.text}</b>
               )}
               {summary.bar ? (
-                <span className="sum-bar">
-                  <span className={summary.bar.over ? 'over' : undefined} style={{ width: `${summary.bar.pct}%` }} />
+                <span className="sum-bars">
+                  <span className="sum-bar">
+                    <span className={summary.bar.over ? 'over' : undefined} style={{ width: `${summary.bar.pct}%` }} />
+                  </span>
+                  {/* The macros, on the calorie bar's scale, 3px beneath it. */}
+                  {def.slug === 'calories' && macros?.known ? (
+                    <MacroBar totals={macros} target={ctx.calorieTarget} height={3} showKey={false} />
+                  ) : null}
                 </span>
               ) : null}
               {summary.note ? (

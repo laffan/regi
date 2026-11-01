@@ -23,7 +23,7 @@ export const keys = {
 };
 
 const LOG_TOUCHED = [
-  'totals', 'entries', 'series', 'books', 'goals', 'draft', 'saved-meals', 'writing-projects', 'closures',
+  'totals', 'entries', 'series', 'books', 'goals', 'draft', 'saved-meals', 'writing-projects', 'closures', 'macros',
 ];
 
 export function useInvalidateAfterLog() {
@@ -63,6 +63,9 @@ export const useConnections = () => useQuery({ queryKey: keys.connections, query
 
 export const useSharedTotals = (from: string, to: string, enabled = true) =>
   useQuery({ queryKey: keys.shared(from, to), queryFn: () => api.getSharedTotals(from, to), enabled });
+
+export const useDailyMacros = (from: string, to: string) =>
+  useQuery({ queryKey: ['macros', from, to], queryFn: () => api.getDailyMacros(from, to) });
 
 export const useDayClosures = (from: string, to: string) =>
   useQuery({ queryKey: keys.closures(from, to), queryFn: () => api.getDayClosures(from, to) });

@@ -4,6 +4,7 @@
 // draft rows, and nothing reaches a module until the review column is approved.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Icon } from '@/components/Icon';
 import { EntryEditDialog } from '@/components/EntryEditDialog';
 import { MacroBar, MacroLine, MealItemsEditor, SourceSummary } from '@/components/Nutrition';
@@ -43,6 +44,26 @@ export function LogPage() {
   const [editing, setEditing] = useState<Entry | null>(null);
   const [filter, setFilter] = useState<string>('all');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Arriving from the dashboard's meal bar: show that entry, marked.
+  const [params, setParams] = useSearchParams();
+  const target = params.get('entry');
+  const [flash, setFlash] = useState<string | null>(null);
+  useEffect(() => {
+    if (!target || !entries.data) return;
+    if (!entries.data.some((e) => e.id === target)) return;
+    setFilter('all');
+    setFlash(target);
+    requestAnimationFrame(() =>
+      document.getElementById(`entry-${target}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }),
+    );
+    setParams({}, { replace: true });
+  }, [target, entries.data, setParams]);
+  useEffect(() => {
+    if (!flash) return;
+    const t = window.setTimeout(() => setFlash(null), 2500);
+    return () => window.clearTimeout(t);
+  }, [flash]);
 
   // Every module with something in the fortnight, plus the active ones.
   const filterOptions = useMemo(() => {
@@ -172,7 +193,7 @@ export function LogPage() {
                   {list.map((entry) => {
                     const def = moduleDef(entry.module_slug);
                     return (
-                      <tr key={entry.id} className="log-row">
+                      <tr key={entry.id} id={`entry-${entry.id}`} className={flash === entry.id ? 'log-row flash' : 'log-row'}>
                         <td style={{ opacity: 0.6 }}>{timeOfDay(entry.occurred_at)}</td>
                         <td>
                           {entry.label}
