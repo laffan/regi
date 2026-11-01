@@ -451,3 +451,13 @@ a.src:hover { text-decoration: underline; }
 .wk > .future { cursor: default; }
 .sumrow .sum-bars { flex: 1; max-width: 220px; display: flex; flex-direction: column; gap: 2px; }
 .sumrow .sum-bars .sum-bar { max-width: none; width: 100%; flex: none; }
+/* A grid cell wrapping a widget or chart, so either can span columns. */
+.wcell { display: flex; min-width: 0; background: var(--color-bg); }
+.wcell > .wg { flex: 1; }
+
+/* — Log rows open a summary in the sidebar — */
+.log-row.clickable { cursor: pointer; }
+.log-row.selected > td { background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
+.log-row:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.summary-items { display: flex; flex-direction: column; }
+.summary-item { display: flex; flex-direction: column; gap: 3px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13px; }

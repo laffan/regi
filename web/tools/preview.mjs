@@ -89,7 +89,7 @@ function tableFor(url, activeSlugs) {
     case 'day_closures':
       return fx.dayClosures;
     case 'log_drafts':
-      return [fx.draft];
+      return noDrafts ? [] : [fx.draft];
     case 'log_draft_rows':
       return fx.draftRows;
     case 'writing_projects':
@@ -196,6 +196,24 @@ const scenarios = [
       await page.waitForTimeout(300);
     },
   },
+  // Fifth round.
+  {
+    name: 'fb5-log-summary',
+    path: '/log',
+    active: ['weight', 'calories', 'reading'],
+    noDrafts: true,
+    run: async (page) => {
+      await page.locator('#entry-e3 td').first().click();
+    },
+  },
+  {
+    name: 'fb5-settings-options',
+    path: '/settings/modules',
+    active: ['weight', 'calories', 'reading', 'act-water'],
+    run: async (page) => {
+      await page.locator('.mod-row', { hasText: 'Calories' }).getByRole('button', { name: /Options/ }).click();
+    },
+  },
   {
     name: 'fb2-log-filter',
     path: '/log',
@@ -240,6 +258,7 @@ await context.addInitScript(() => {
 });
 
 let activeSlugs = ['weight', 'calories', 'reading'];
+let noDrafts = false;
 
 await context.route(`**://${SUPABASE_HOST}/**`, async (route) => {
   const url = new URL(route.request().url());
@@ -287,6 +306,7 @@ page.on('pageerror', (err) => consoleErrors.push(`pageerror: ${err.message}`));
 
 for (const scenario of scenarios) {
   activeSlugs = scenario.active;
+  noDrafts = Boolean(scenario.noDrafts);
   await shoot(page, scenario.name, scenario.path, scenario.click, 900, scenario.run);
   console.log(`✓ ${scenario.name}`);
 }

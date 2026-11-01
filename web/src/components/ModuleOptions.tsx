@@ -139,6 +139,11 @@ function UnitChoice<T extends string>({
   );
 }
 
+/** Whether a module has anything to set — the Options toggle shows only then. */
+export function hasOptions(module: Pick<ActiveModule, 'slug' | 'kind'>): boolean {
+  return ['calories', 'writing', 'weight', 'running'].includes(module.slug) || module.kind === 'activity';
+}
+
 /** Everything a module offers, or null when it has nothing to set. */
 export function ModuleOptions({ module }: { module: ActiveModule }) {
   const save = useSetModuleSettings();

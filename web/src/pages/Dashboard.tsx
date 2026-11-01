@@ -5,7 +5,6 @@
 
 import { useMemo, useState } from 'react';
 import { CrosstalkChart } from '@/components/CrosstalkChart';
-import { GoalsPanel, ModulesPanel } from '@/components/Panels';
 import { WeekStrip, indexTotals } from '@/components/WeekStrip';
 import { widgetFor } from '@/components/widgets';
 import {
@@ -33,7 +32,6 @@ import {
 } from '@/lib/dates';
 import { group } from '@/lib/format';
 import { mean, movingMean, type Point } from '@/lib/projection';
-import { readGoal } from '@/modules/goals';
 import { CROSSTALK, moduleDef, publisherOf } from '@/modules/registry';
 
 const HISTORY_DAYS = 90;
@@ -70,17 +68,12 @@ export function Dashboard() {
   const defs = active.map((m) => moduleDef(m.slug));
   const count = active.length;
   const compact = count >= 4;
-  // Two modules get a cell each; three make room for the Today panel as a
-  // fourth; four or more fall back to a 3-up grid of compact widgets.
-  const columns = count >= 4 ? 3 : count === 3 ? 4 : Math.max(count, 1);
+  // Widgets and crosstalk charts share one grid with no side panels: two
+  // columns up to three modules (three widgets and a chart make a 2×2), three
+  // columns of compact widgets from four on.
+  const columns = count >= 4 ? 3 : 2;
 
   const days = weekDays(startOfWeek(today));
-  const activeGoals = (goals.data ?? []).filter((g) => active.some((m) => m.slug === g.module_slug));
-  const goalCtx = { seriesFor, seriesByName: series.byName, today };
-  // The panel answers "how is today going": the recurring goals of the
-  // modules that are on.
-  const slots = compact ? 4 : 3;
-  const readouts = activeGoals.slice(0, slots).map((g) => readGoal(g, goalCtx));
 
   const widgetProps = {
     compact,
@@ -97,24 +90,15 @@ export function Dashboard() {
     closures: closures.data ?? [],
   };
 
-  // The panel takes whatever the widgets leave, so the grid never ends on a
-  // hole — five cells across three columns is four widgets and a wide panel.
-  const cells = count + 1;
-  const overhang = cells % columns;
-  const panelSpan = overhang === 0 ? 1 : columns - overhang + 1;
-
-  const goalsPanel = (
-    <GoalsPanel
-      key="goals"
-      title={count <= 3 ? 'Today' : 'Goals'}
-      icon={count <= 3 ? 'target' : null}
-      readouts={readouts}
-      compact={compact}
-      span={panelSpan}
-    />
-  );
-
   const charts = CROSSTALK.filter((c) => c.requires.every((slug) => active.some((m) => m.slug === slug)));
+  const calorieTarget = Number(active.find((m) => m.slug === 'calories')?.settings.daily_target ?? 2200);
+
+  // The last cell stretches over whatever its row leaves, so the grid never
+  // ends on a hole — two widgets and a chart put the chart full-width below.
+  const cells = count + charts.length;
+  const overhang = cells % columns;
+  const lastSpan = overhang === 0 ? 1 : columns - overhang + 1;
+  const spanOf = (index: number) => (index === cells - 1 && lastSpan > 1 ? lastSpan : 1);
 
   return (
     <>
@@ -143,45 +127,24 @@ export function Dashboard() {
       />
 
       <div className="wgrid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-        {active.map((m) => {
+        {active.map((m, i) => {
           const Widget = widgetFor(m.slug, m.kind);
+          const span = spanOf(i);
           return (
-            <Widget key={m.slug} {...widgetProps} slug={m.slug} settings={m.settings} series={seriesFor(m.slug)} />
+            <div key={m.slug} className="wcell" style={span > 1 ? { gridColumn: `span ${span}` } : undefined}>
+              <Widget {...widgetProps} slug={m.slug} settings={m.settings} series={seriesFor(m.slug)} />
+            </div>
           );
         })}
-        {/* At one or two modules the panel has room beside the chart instead. */}
-        {count >= 3 ? goalsPanel : null}
+        {charts.map((chart, j) => {
+          const span = spanOf(count + j);
+          return (
+            <div key={chart.id} className="wcell" style={span > 1 ? { gridColumn: `span ${span}` } : undefined}>
+              <ChartCell chart={chart} today={today} seriesFor={seriesFor} calorieTarget={calorieTarget} />
+            </div>
+          );
+        })}
       </div>
-
-      {charts.length ? (
-        <div
-          className="wgrid"
-          style={{
-            gridTemplateColumns:
-              charts.length > 1
-                ? 'repeat(2, minmax(0, 1fr))'
-                : count === 3
-                  ? '2fr 1fr'
-                  : count < 3
-                    ? 'minmax(0, 1fr) 300px'
-                    : 'minmax(0, 1fr)',
-          }}
-        >
-          {charts.map((chart) => (
-            <ChartCell
-              key={chart.id}
-              chart={chart}
-              today={today}
-              seriesFor={seriesFor}
-              calorieTarget={Number(
-                active.find((m) => m.slug === 'calories')?.settings.daily_target ?? 2200,
-              )}
-            />
-          ))}
-          {charts.length === 1 && count === 3 ? <ModulesPanel modules={modules.data ?? []} /> : null}
-          {charts.length === 1 && count < 3 ? <GoalsPanel title="Goals" readouts={readouts} /> : null}
-        </div>
-      ) : null}
     </>
   );
 }

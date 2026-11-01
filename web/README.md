@@ -30,19 +30,17 @@ src/
 
 ## The dashboard is a widget host
 
-`Dashboard.tsx` reads which modules are active and drops each one's widget into
-an equal-width cell. The count decides the layout, matching the canvas:
+`Dashboard.tsx` reads which modules are active and puts each one's widget, then
+each crosstalk chart, into one grid. There are no side panels — no module list,
+no goals panel. The count decides the columns:
 
 | Active modules | Layout |
 | --- | --- |
-| 1–2 | A cell each; the goals panel sits beside the crosstalk chart |
-| 3 | Three widgets plus the Today panel, four across |
-| 4+ | Compact widgets in a 3-up grid, goals as the last cell, charts two across |
+| 1–3 | Two columns: three widgets and a chart make a 2×2 |
+| 4+ | Compact widgets, three across, charts after them |
 
-Activity trackers all use one widget (`ActivityWidget`), looked up by `kind`.
-The tracker icon picker loads the full Lucide set (`lucide`, ~100 kB gzipped)
-only while the picker is open; a chosen icon's geometry is stored with the
-tracker and drawn by `Icon` from then on.
+The last cell stretches across whatever its row leaves, so the grid never ends
+on a hole (two widgets and a chart put the chart full-width underneath).
 
 A crosstalk chart appears when every module it draws on is active — the pairs
 are declared in `registry.ts`, and each chart owns neither series it draws.

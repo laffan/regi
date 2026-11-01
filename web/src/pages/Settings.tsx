@@ -9,7 +9,7 @@
 import { Fragment, useState } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { Icon } from '@/components/Icon';
-import { ModuleOptions } from '@/components/ModuleOptions';
+import { hasOptions, ModuleOptions } from '@/components/ModuleOptions';
 import { TrackerDialog } from '@/components/TrackerDialog';
 import { useAuth } from '@/data/auth';
 import {
@@ -369,6 +369,15 @@ function ModulesPane() {
   const modules = useModules();
   const setActive = useSetModuleActive();
   const [creating, setCreating] = useState(false);
+  // Options stay folded away until asked for, one module at a time or several.
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (slug: string) =>
+    setOpen((current) => {
+      const next = new Set(current);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      return next;
+    });
 
   const all = modules.data ?? [];
   // Your own trackers first, newest last, then the built-ins.
@@ -379,7 +388,7 @@ function ModulesPane() {
       <h3 style={{ margin: '0 0 4px' }}>Modules</h3>
       <p style={{ fontSize: 13, maxWidth: 560, opacity: 0.75 }}>
         Activating a module adds its widget to the dashboard and its line to every calendar day. Active modules
-        show their options here. Nothing is deleted when you turn one off.
+        with settings have an Options button. Nothing is deleted when you turn one off.
       </p>
 
       <button type="button" className="btn btn-primary" style={{ marginTop: 4 }} onClick={() => setCreating(true)}>
@@ -410,6 +419,17 @@ function ModulesPane() {
                     {def.kind === 'activity' ? 'one yes/no a day' : `publishes ${def.publishes.join(', ')}`}
                   </div>
                 </div>
+                {m.active && hasOptions(m) ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    aria-expanded={open.has(m.slug)}
+                    aria-controls={`opts-${m.slug}`}
+                    onClick={() => toggle(m.slug)}
+                  >
+                    Options {open.has(m.slug) ? '▴' : '▾'}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={m.active ? 'btn btn-secondary' : 'btn btn-primary'}
@@ -419,7 +439,11 @@ function ModulesPane() {
                   {m.active ? 'Deactivate' : 'Activate'}
                 </button>
               </div>
-              {m.active ? <ModuleOptions module={m} /> : null}
+              {m.active && open.has(m.slug) ? (
+                <div id={`opts-${m.slug}`}>
+                  <ModuleOptions module={m} />
+                </div>
+              ) : null}
             </div>
           );
         })}

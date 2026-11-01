@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Icon } from '@/components/Icon';
 import { EntryEditDialog } from '@/components/EntryEditDialog';
-import { MacroBar, MacroLine, MealItemsEditor, SourceSummary } from '@/components/Nutrition';
+import { MacroBar, MacroLine, MealItemsEditor, SourceSummary, SourceTag } from '@/components/Nutrition';
 import { VoiceButton } from '@/components/VoiceButton';
 import {
   useApproveDraft,
@@ -22,7 +22,7 @@ import {
   useUpdateDraftRow,
 } from '@/data/hooks';
 import { addDays, dowShort, monthName, timeOfDay, today as todayISO } from '@/lib/dates';
-import { group, moduleValue } from '@/lib/format';
+import { duration, group, moduleValue, pace } from '@/lib/format';
 import { moduleDef } from '@/modules/registry';
 import type { DraftRow, Entry, MealItem } from '@/lib/types';
 import type { PendingDraft } from '@/data/api';
@@ -42,6 +42,11 @@ export function LogPage() {
 
   const [text, setText] = useState('');
   const [editing, setEditing] = useState<Entry | null>(null);
+  // The entry shown in the sidebar while nothing is waiting for review.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = (entries.data ?? []).find((e) => e.id === selectedId) ?? null;
+  const reviewing =
+    (drafts.data ?? []).some((d) => d.rows.length > 0) || parsing.pending.length > 0 || parsing.failed.length > 0;
   const [filter, setFilter] = useState<string>('all');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -193,7 +198,24 @@ export function LogPage() {
                   {list.map((entry) => {
                     const def = moduleDef(entry.module_slug);
                     return (
-                      <tr key={entry.id} id={`entry-${entry.id}`} className={flash === entry.id ? 'log-row flash' : 'log-row'}>
+                      <tr
+                        key={entry.id}
+                        id={`entry-${entry.id}`}
+                        className={[
+                          'log-row',
+                          'clickable',
+                          flash === entry.id ? 'flash' : '',
+                          !reviewing && selectedId === entry.id ? 'selected' : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
+                        tabIndex={0}
+                        aria-selected={!reviewing && selectedId === entry.id}
+                        onClick={() => setSelectedId((id) => (id === entry.id ? null : entry.id))}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && e.target === e.currentTarget) setSelectedId(entry.id);
+                        }}
+                      >
                         <td style={{ opacity: 0.6 }}>{timeOfDay(entry.occurred_at)}</td>
                         <td>
                           {entry.label}
@@ -236,7 +258,10 @@ export function LogPage() {
                             type="button"
                             className="btn btn-ghost row-edit"
                             style={{ fontSize: 12 }}
-                            onClick={() => setEditing(entry)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditing(entry);
+                            }}
                             aria-label={`Edit ${entry.label ?? def.name}`}
                           >
                             Edit
@@ -269,6 +294,9 @@ export function LogPage() {
           for (const id of ids) await discard.mutateAsync(id);
         }}
         onRetry={(line) => setText(line)}
+        selected={reviewing ? null : selected}
+        onEditSelected={() => selected && setEditing(selected)}
+        onCloseSelected={() => setSelectedId(null)}
       />
 
       {editing ? <EntryEditDialog entry={editing} onClose={() => setEditing(null)} /> : null}
@@ -284,6 +312,9 @@ function ReviewColumn({
   onApprove,
   onDiscard,
   onRetry,
+  selected,
+  onEditSelected,
+  onCloseSelected,
 }: {
   drafts: PendingDraft[];
   /** Lines sent and still being read and priced. */
@@ -293,6 +324,10 @@ function ReviewColumn({
   onApprove: (draftIds: string[]) => Promise<void>;
   onDiscard: (draftIds: string[]) => Promise<void>;
   onRetry: (line: string) => void;
+  /** An entry clicked in the list, shown here while nothing awaits review. */
+  selected: Entry | null;
+  onEditSelected: () => void;
+  onCloseSelected: () => void;
 }) {
   const update = useUpdateDraftRow();
   const remove = useDeleteDraftRow();
@@ -302,6 +337,10 @@ function ReviewColumn({
   const ids = drafts.map((d) => d.draft.id);
   const nothing = rows.length === 0 && pending.length === 0 && failed.length === 0;
   const locally = drafts.some((d) => d.draft.parser === 'fallback');
+
+  if (nothing && selected) {
+    return <EntrySummary entry={selected} onEdit={onEditSelected} onClose={onCloseSelected} />;
+  }
 
   if (nothing) {
     return (
@@ -313,7 +352,8 @@ function ReviewColumn({
           </div>
         </div>
         <div className="empty">
-          Anything you write below lands here first, as rows you can correct before they reach a module.
+          Anything you write above lands here first, as rows you can correct before they reach a module. Click
+          an entry in the list to see its summary here.
         </div>
       </div>
     );
@@ -501,6 +541,95 @@ function DraftCard({
             onPatch({ occurred_at: at.toISOString() });
           }}
         />
+      </div>
+    </div>
+  );
+}
+
+/** The sidebar's summary of one logged entry: what, when, how much, and — for food — from where. */
+function EntrySummary({ entry, onEdit, onClose }: { entry: Entry; onEdit: () => void; onClose: () => void }) {
+  const def = moduleDef(entry.module_slug);
+  const items = (entry.items ?? []) as MealItem[];
+  const isMeal = entry.module_slug === 'calories';
+  const how: Record<string, string> = {
+    log: 'From the Log line, after review',
+    manual: 'Logged directly',
+    saved_meal: 'From a saved combination',
+    import: 'Imported',
+  };
+  const seconds = Number(entry.payload?.duration_s ?? 0);
+
+  return (
+    <div className="review">
+      <div className="review-head">
+        <div style={{ minWidth: 0 }}>
+          <div className="kick">
+            <Icon name={def.icon} />
+            {def.name}
+          </div>
+          <h4 style={{ margin: '4px 0 0' }}>{entry.label ?? def.name}</h4>
+        </div>
+        <button type="button" className="btn btn-ghost" style={{ fontSize: 12 }} onClick={onClose} aria-label="Close the summary">
+          Close
+        </button>
+      </div>
+
+      <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div>
+          <div className="big" style={{ fontSize: 36 }}>
+            {isMeal ? group(entry.value ?? 0) : moduleValue(entry.module_slug, entry.value, entry.unit)}
+            {isMeal ? <span style={{ fontSize: 14, fontWeight: 400, opacity: 0.6 }}> kcal</span> : null}
+          </div>
+          <div style={{ fontSize: 12.5, opacity: 0.7, marginTop: 6 }}>
+            {dowShort(entry.local_date)} {Number(entry.local_date.slice(8))} {monthName(entry.local_date)} ·{' '}
+            {timeOfDay(entry.occurred_at)}
+          </div>
+          <div style={{ fontSize: 11.5, opacity: 0.55, marginTop: 2 }}>{how[entry.source] ?? entry.source}</div>
+        </div>
+
+        {isMeal && items.length ? (
+          <>
+            <MacroBar items={items} target={entry.value ?? 0} />
+            <div className="summary-items">
+              {items.map((item, i) => (
+                <div key={item.id ?? i} className="summary-item">
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <b style={{ flex: 1, minWidth: 0 }}>{item.name}</b>
+                    <span style={{ fontWeight: 800 }}>{item.kcal == null ? '—' : group(item.kcal)}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, fontSize: 11.5 }}>
+                    {item.portion ? <span style={{ opacity: 0.7 }}>{item.portion}</span> : null}
+                    <SourceTag item={item} long />
+                    {item.matched_name ? <span style={{ opacity: 0.6 }}>“{item.matched_name}”</span> : null}
+                  </div>
+                  {item.basis ? <div style={{ fontSize: 11, opacity: 0.55 }}>{item.basis}</div> : null}
+                  <div style={{ fontSize: 11.5 }}>
+                    <MacroLine items={[item]} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : null}
+
+        {entry.module_slug === 'reading' && entry.payload?.end_page ? (
+          <div style={{ fontSize: 12.5 }}>Up to p. {group(Number(entry.payload.end_page))}</div>
+        ) : null}
+        {entry.module_slug === 'running' && seconds ? (
+          <div style={{ fontSize: 12.5 }}>
+            {duration(seconds)} · {pace(seconds, entry.value ?? 0)} per {entry.unit ?? 'mi'}
+          </div>
+        ) : null}
+
+        {entry.note ? (
+          <div style={{ fontSize: 13, borderLeft: '3px solid var(--line)', paddingLeft: 10 }}>{entry.note}</div>
+        ) : null}
+      </div>
+
+      <div style={{ padding: '14px 18px', borderTop: '1px solid var(--line)', display: 'flex', gap: 8, marginTop: 'auto' }}>
+        <button type="button" className="btn btn-primary" style={{ minHeight: 40 }} onClick={onEdit}>
+          Edit entry
+        </button>
       </div>
     </div>
   );
