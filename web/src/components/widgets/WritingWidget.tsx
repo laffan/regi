@@ -14,7 +14,7 @@ import type { WidgetProps } from './types';
  * The widget leads with whichever unit the user's `measure` setting picks and
  * shows the other beside it, because adding them together would be nonsense.
  */
-export function WritingWidget({ compact, today, totals, goals, settings, writingProjects }: WidgetProps) {
+export function WritingWidget({ compact, today, when, totals, goals, settings, writingProjects }: WidgetProps) {
   const log = useLogWritingSession();
   const [projectId, setProjectId] = useState<string | null>(null);
 
@@ -65,7 +65,7 @@ export function WritingWidget({ compact, today, totals, goals, settings, writing
               ? 'words'
               : (target_?.measure ?? measure);
           const value = /\bh\b|hour/i.test(text) ? amount * 60 : amount;
-          log.mutate({ project: target_ ?? null, amount: Math.round(value), measure: unit });
+          log.mutate({ project: target_ ?? null, amount: Math.round(value), measure: unit, when });
         }}
       >
         {active.length > 1 ? (

@@ -66,6 +66,30 @@ export function shortDate(iso: string): string {
   return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
 }
 
+const DOW_LONG = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+/** "Week of October 26 – November 1"; one month is named once: "Week of September 7 – 13". */
+export function weekRangeLabel(startISO: string): string {
+  const a = fromISODate(startISO);
+  const b = fromISODate(addDays(startISO, 6));
+  const end = a.getMonth() === b.getMonth() ? `${b.getDate()}` : `${MONTHS[b.getMonth()]} ${b.getDate()}`;
+  return `Week of ${MONTHS[a.getMonth()]} ${a.getDate()} – ${end}`;
+}
+
+/** "Tuesday, October 27" */
+export function longDate(iso: string): string {
+  const d = fromISODate(iso);
+  return `${DOW_LONG[(d.getDay() + 6) % 7]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+}
+
+/** A moment on a given calendar day, at the current clock time — where a back-dated entry lands. */
+export function atNowOn(iso: string): Date {
+  const d = fromISODate(iso);
+  const now = new Date();
+  d.setHours(now.getHours(), now.getMinutes(), 0, 0);
+  return d;
+}
+
 /** "Week of 7 September" */
 export function weekLabel(startISO: string): string {
   const d = fromISODate(startISO);

@@ -3,7 +3,7 @@
 // or not know the function at all — and the app says so rather than failing
 // quietly (approving a draft on an old database drops its macros, for one).
 
-export const EXPECTED_SCHEMA = '20261103000100';
+export const EXPECTED_SCHEMA = '20261104000100';
 
 /** Migrations the client relies on, newest last, for the on-screen hint. */
 export const REQUIRED_MIGRATIONS = [
@@ -11,4 +11,5 @@ export const REQUIRED_MIGRATIONS = [
   '20261101000200_feedback_round.sql',
   '20261102000100_time_zone.sql',
   '20261103000100_schema_version.sql',
+  '20261104000100_saved_combinations.sql',
 ];

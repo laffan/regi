@@ -211,9 +211,9 @@ export const books = [
 ];
 
 export const savedMeals = [
-  { id: 's1', name: 'Usual breakfast', detail: 'Oats 80 g · banana · black coffee', kcal: 420, items: [], uses: 34 },
+  { id: 's1', name: 'Usual breakfast', detail: 'Oats 80 g · banana · black coffee', kcal: 420, items: [], uses: 34, source_entry_id: 'e4' },
   { id: 's2', name: 'Post-run shake', detail: 'Whey 30 g · milk 250 ml · banana', kcal: 310, items: [], uses: 12 },
-  { id: 's3', name: 'Oat latte', detail: 'Oat milk 200 ml · double shot', kcal: 120, items: [], uses: 21 },
+  { id: 's3', name: 'Oat latte', detail: 'Oat milk 200 ml · double shot', kcal: 120, items: [], uses: 21, source_entry_id: 'e1' },
 ];
 
 export const goals = [
@@ -321,4 +321,4 @@ export function sharedTotals() {
 export const dayClosures = [{ module_slug: 'calories', local_date: yesterday, closed_at: iso(yesterday, '20:30') }];
 
 // The schema the fixtures stand for; matches web/src/lib/schema.ts.
-export const SCHEMA_VERSION = '20261103000100';
+export const SCHEMA_VERSION = '20261104000100';

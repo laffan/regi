@@ -156,6 +156,25 @@ const scenarios = [
       await page.waitForURL('**/log');
     },
   },
+  // Third round.
+  {
+    name: 'fb3-dashboard-picked-day',
+    path: '/',
+    active: ['weight', 'calories', 'reading'],
+    run: async (page) => {
+      await page.locator('.wk > button').nth(2).click();
+      await page.locator('.chip-group').first().hover();
+    },
+  },
+  {
+    name: 'fb3-save-combination',
+    path: '/log',
+    active: ['weight', 'calories', 'reading'],
+    run: async (page) => {
+      await page.getByRole('button', { name: /^Edit Yogurt/ }).click();
+      await page.getByRole('button', { name: 'Add as Saved Combination' }).click();
+    },
+  },
   {
     name: 'fb2-log-filter',
     path: '/log',

@@ -399,3 +399,17 @@ a.src:hover { text-decoration: underline; }
 .macro-line > span { display: inline-flex; align-items: center; gap: 4px; }
 .macro-line i { display: inline-block; width: 8px; height: 3px; }
 .macro-line b { font-weight: 800; }
+
+/* — saved combination chip: name adds, the figure becomes × on hover — */
+.chip-group { display: inline-flex; }
+.chip-group .chip-main { border-right: 0; }
+.chip-group .chip-kcal { min-width: 44px; justify-content: center; position: relative; }
+.chip-group .chip-kcal .kcal { opacity: 0.55; }
+.chip-group .chip-kcal .x { display: none; font-size: 15px; line-height: 1; color: var(--color-accent-700); }
+.chip-group:hover .chip-kcal .kcal, .chip-group .chip-kcal:focus-visible .kcal { display: none; }
+.chip-group:hover .chip-kcal .x, .chip-group .chip-kcal:focus-visible .x { display: inline; }
+@media (hover: none) { .chip-group .chip-kcal .x { display: inline; margin-left: 6px; } }
+.qcheck { align-self: flex-end; }
+.dash-title.picked { color: var(--color-accent-700); }
+.wk > .picked { box-shadow: inset 0 0 0 3px var(--color-accent-700); }
+.wk > .future { cursor: default; }

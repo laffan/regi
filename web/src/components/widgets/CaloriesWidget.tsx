@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Icon } from '@/components/Icon';
 import { MacroBar } from '@/components/Nutrition';
+import { SavedChip } from '@/components/SavedChip';
 import { QuickInput } from './QuickInput';
 import { useLogSavedMeal, useParseLog, useSetDayClosed } from '@/data/hooks';
 import { totalKey } from '@/components/WeekStrip';
@@ -15,7 +16,7 @@ const DEFAULT_TARGET = 2200;
  * left, and the macro split. Sending a line goes straight to the Log, where
  * the draft appears as a placeholder while its items are looked up.
  */
-export function CaloriesWidget({ compact, today, totals, entries, settings, savedMeals, closures }: WidgetProps) {
+export function CaloriesWidget({ compact, today, when, totals, entries, settings, savedMeals, closures }: WidgetProps) {
   const navigate = useNavigate();
   const parse = useParseLog();
   const quickAdd = useLogSavedMeal();
@@ -49,7 +50,7 @@ export function CaloriesWidget({ compact, today, totals, entries, settings, save
         placeholder="turkey sandwich and an apple"
         voice
         onSubmit={(text) => {
-          parse.mutate(text);
+          parse.mutate(when ? { text, now: when.occurred_at } : text);
           navigate('/log');
         }}
       >
@@ -91,16 +92,12 @@ export function CaloriesWidget({ compact, today, totals, entries, settings, save
       {chips.length && !closed ? (
         <div className="chips" style={{ marginTop: 'auto' }}>
           {chips.map((meal) => (
-            <button
+            <SavedChip
               key={meal.id}
-              type="button"
-              className="btn btn-secondary chip"
+              meal={meal}
               disabled={quickAdd.isPending}
-              onClick={() => quickAdd.mutate(meal.id)}
-              title={meal.detail ?? undefined}
-            >
-              {meal.name} <span>{group(meal.kcal)}</span>
-            </button>
+              onAdd={() => quickAdd.mutate({ id: meal.id, when })}
+            />
           ))}
         </div>
       ) : null}

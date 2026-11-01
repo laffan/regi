@@ -6,7 +6,7 @@ import { totalKey } from '@/components/WeekStrip';
 import { group } from '@/lib/format';
 import type { WidgetProps } from './types';
 
-export function ReadingWidget({ compact, today, totals, goals, books }: WidgetProps) {
+export function ReadingWidget({ compact, today, isToday, when, totals, goals, books }: WidgetProps) {
   const log = useLogPages();
 
   const book = books.find((b) => b.status === 'reading') ?? null;
@@ -33,7 +33,7 @@ export function ReadingWidget({ compact, today, totals, goals, books }: WidgetPr
         onSubmit={(text) => {
           const count = Number(text.replace(/[^\d.]/g, ''));
           if (!Number.isFinite(count) || count <= 0) return 'Type how many pages, e.g. 24.';
-          log.mutate({ pages: Math.round(count), book });
+          log.mutate({ pages: Math.round(count), book, when });
         }}
       />
 
@@ -71,7 +71,7 @@ export function ReadingWidget({ compact, today, totals, goals, books }: WidgetPr
 
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
         <div style={{ font: "800 22px 'Archivo'" }}>{group(pagesToday)}</div>
-        <span style={{ fontSize: 11.5, opacity: 0.6 }}>of {group(Number(dailyGoal))} pages today</span>
+        <span style={{ fontSize: 11.5, opacity: 0.6 }}>of {group(Number(dailyGoal))} pages {isToday ? 'today' : 'that day'}</span>
       </div>
 
     </div>

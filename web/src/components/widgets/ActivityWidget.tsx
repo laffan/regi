@@ -10,7 +10,7 @@ import type { WidgetProps } from './types';
  * A tracker someone made for themselves. No numbers, no settings: one switch
  * for today — "I did!" or "Not today" — and the last fortnight beneath it.
  */
-export function ActivityWidget({ slug, compact, today, totals }: WidgetProps) {
+export function ActivityWidget({ slug, compact, today, isToday, totals }: WidgetProps) {
   const def = moduleDef(slug);
   const toggle = useSetActivityDone();
 
@@ -39,7 +39,7 @@ export function ActivityWidget({ slug, compact, today, totals }: WidgetProps) {
         type="button"
         role="switch"
         aria-checked={done}
-        aria-label={`${def.name} today`}
+        aria-label={`${def.name} ${isToday ? 'today' : 'that day'}`}
         className="switch"
         disabled={toggle.isPending}
         onClick={() => toggle.mutate({ slug, name: def.name, date: today, done: !done })}

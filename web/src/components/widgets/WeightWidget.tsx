@@ -10,7 +10,7 @@ import { timeOfDay } from '@/lib/dates';
 import type { WidgetProps } from './types';
 
 /** Weight: type the reading, then the last one and the trend beneath. */
-export function WeightWidget({ compact, today, totals, entries, series, profile }: WidgetProps) {
+export function WeightWidget({ compact, today, isToday, when, totals, entries, series, profile }: WidgetProps) {
   const log = useLogWeight();
 
   const todayTotal = totals.get(totalKey(today, 'weight'));
@@ -26,7 +26,7 @@ export function WeightWidget({ compact, today, totals, entries, series, profile 
           <Icon name="scale" />
           Weight
         </Link>
-        <span className="wg-meta">{loggedAt ? `logged ${timeOfDay(loggedAt)}` : 'not logged today'}</span>
+        <span className="wg-meta">{loggedAt ? `logged ${timeOfDay(loggedAt)}` : isToday ? 'not logged today' : 'not logged that day'}</span>
       </div>
 
       <QuickInput
@@ -40,7 +40,7 @@ export function WeightWidget({ compact, today, totals, entries, series, profile 
           const [lo, hi] = unit === 'kg' ? [20, 350] : [40, 800];
           if (!Number.isFinite(value) || value === 0) return 'Type a weight, e.g. 182.4.';
           if (value < lo || value > hi) return `That reads as ${value} ${unit} — check the number.`;
-          log.mutate({ value: Math.round(value * 10) / 10, unit });
+          log.mutate({ value: Math.round(value * 10) / 10, unit, when });
         }}
       />
 
@@ -55,7 +55,7 @@ export function WeightWidget({ compact, today, totals, entries, series, profile 
           </span>
         ) : null}
       </div>
-      <div className="qnote">{todayTotal ? 'today' : last !== null ? 'last reading' : 'no readings yet'}</div>
+      <div className="qnote">{todayTotal ? (isToday ? 'today' : 'that day') : last !== null ? 'last reading' : 'no readings yet'}</div>
     </div>
   );
 }

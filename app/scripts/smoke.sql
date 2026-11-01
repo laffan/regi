@@ -382,6 +382,16 @@ begin
 end
 $$;
 
+-- A saved combination remembers its entry, and outlives it.
+select public.save_meal_from_entry(:'toast_log_meal', 'Toast combo') \gset combo_
+do $$
+begin
+  if (select source_entry_id from public.saved_meals where name = 'Toast combo') is null then
+    raise exception 'saved combination should record its entry';
+  end if;
+end
+$$;
+
 -- Closing a day.
 insert into public.day_closures (user_id, module_slug, local_date) values (auth.uid(), 'calories', '2026-09-08');
 

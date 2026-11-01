@@ -152,6 +152,8 @@ export interface SavedMeal {
   kcal: number;
   items: MealItem[];
   uses: number;
+  /** The logged entry this combination was saved from, if any. */
+  source_entry_id?: string | null;
 }
 
 export interface Goal {

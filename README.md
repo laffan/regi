@@ -79,6 +79,14 @@ Modules → Track Activity): a name, an icon from the Lucide set, and a daily
 `activity.<slug>`, and appear everywhere a built-in does. The icon's geometry
 is stored with the tracker, so a client can draw it without the icon library.
 
+Clicking an earlier day in the dashboard's week strip switches the page to
+that day ("Adding to Wednesday, October 28"): the widgets show it, and anything
+logged from them lands on it. Clicking it again, or today, returns to the week.
+
+Saved combinations (one-tap food) are made from a logged entry's Edit panel,
+choosing which of its items to keep, and remember the entry they came from;
+hovering a combination's calorie figure turns it into a delete control.
+
 On the dashboard every module leads with the same control — an input line with
 its "Log …" button attached — and its numbers sit beneath. A food line sent from
 the Calories widget goes straight to the Log, where it shows as a placeholder

@@ -4,8 +4,16 @@
 
 import { useState } from 'react';
 import { Dialog } from './Dialog';
+import { Icon } from './Icon';
 import { MealItemsEditor } from './Nutrition';
-import { useDeleteEntry, useUpdateEntry, useUpdateMeal } from '@/data/hooks';
+import {
+  useDeleteEntry,
+  useDeleteSavedMeal,
+  useSavedMeals,
+  useSaveCombination,
+  useUpdateEntry,
+  useUpdateMeal,
+} from '@/data/hooks';
 import { toISODate } from '@/lib/dates';
 import { group } from '@/lib/format';
 import { moduleDef } from '@/modules/registry';
@@ -181,9 +189,146 @@ export function EntryEditDialog({ entry, onClose }: { entry: Entry; onClose: () 
         </div>
       ) : null}
 
+      {isMeal ? <CombinationsSection entry={entry} items={items} defaultName={label} /> : null}
+
       <div className="field">
         <label htmlFor="ee-note">Note (optional)</label>
         <input id="ee-note" className="input" value={note} onChange={(e) => setNote(e.target.value)} />
+      </div>
+    </Dialog>
+  );
+}
+
+/**
+ * Saved combinations taken from this entry: the ones already saved, each
+ * removable, and a way to save another from some or all of its items.
+ */
+function CombinationsSection({ entry, items, defaultName }: { entry: Entry; items: MealItem[]; defaultName: string }) {
+  const saved = useSavedMeals();
+  const remove = useDeleteSavedMeal();
+  const [choosing, setChoosing] = useState(false);
+  const fromHere = (saved.data ?? []).filter((m) => m.source_entry_id === entry.id);
+
+  return (
+    <div className="field">
+      <label>Saved combinations</label>
+      {fromHere.length ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 6 }}>
+          {fromHere.map((m) => (
+            <div key={m.id} style={{ display: 'flex', alignItems: 'baseline', gap: 10, fontSize: 13 }}>
+              <b>{m.name}</b>
+              <span style={{ opacity: 0.6, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {m.detail}
+              </span>
+              <span style={{ opacity: 0.7 }}>{group(m.kcal)} kcal</span>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ fontSize: 12, padding: '0 4px' }}
+                disabled={remove.isPending}
+                onClick={() => {
+                  if (window.confirm(`Remove the saved combination “${m.name}”?`)) remove.mutate(m.id);
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, opacity: 0.6, marginBottom: 6 }}>None saved from this entry.</div>
+      )}
+      <button
+        type="button"
+        className="btn btn-secondary"
+        style={{ alignSelf: 'flex-start' }}
+        disabled={!items.some((i) => i.name.trim())}
+        onClick={() => setChoosing(true)}
+      >
+        <Icon name="bookmark" />
+        Add as Saved Combination
+      </button>
+      {choosing ? (
+        <SaveCombinationDialog
+          entryId={entry.id}
+          items={items.filter((i) => i.name.trim())}
+          defaultName={defaultName}
+          onClose={() => setChoosing(false)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** Name it, and keep the items that belong in it. */
+function SaveCombinationDialog({
+  entryId,
+  items,
+  defaultName,
+  onClose,
+}: {
+  entryId: string;
+  items: MealItem[];
+  defaultName: string;
+  onClose: () => void;
+}) {
+  const save = useSaveCombination();
+  const [name, setName] = useState(defaultName);
+  const [kept, setKept] = useState<boolean[]>(items.map(() => true));
+  const [error, setError] = useState<string | null>(null);
+  const chosen = items.filter((_, i) => kept[i]);
+  const total = chosen.reduce((sum, i) => sum + (Number(i.kcal) || 0), 0);
+
+  const submit = () => {
+    if (!name.trim()) return setError('Give it a name.');
+    if (!chosen.length) return setError('Keep at least one item.');
+    save.mutate(
+      { name: name.trim(), items: chosen, sourceEntryId: entryId },
+      { onSuccess: onClose, onError: (err) => setError((err as Error).message) },
+    );
+  };
+
+  return (
+    <Dialog
+      title="Add as Saved Combination"
+      onClose={onClose}
+      actions={
+        <>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="btn btn-primary" onClick={submit} disabled={save.isPending}>
+            {save.isPending ? 'Saving…' : `Save · ${group(total)} kcal`}
+          </button>
+        </>
+      }
+    >
+      {error ? <div className="error">{error}</div> : null}
+      <div className="field">
+        <label htmlFor="combo-name">Name</label>
+        <input id="combo-name" className="input" value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+      <div className="field">
+        <label>Items in this combination</label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {items.map((item, i) => (
+            <label key={item.id ?? i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5 }}>
+              <input
+                type="checkbox"
+                checked={kept[i]}
+                onChange={(e) => setKept((k) => k.map((v, j) => (j === i ? e.target.checked : v)))}
+              />
+              <span style={{ flex: 1 }}>
+                {item.name}
+                {item.portion ? <span style={{ opacity: 0.55 }}> · {item.portion}</span> : null}
+              </span>
+              <span style={{ opacity: 0.7 }}>{item.kcal == null ? '—' : `${group(item.kcal)} kcal`}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+      <div style={{ fontSize: 11.5, opacity: 0.6 }}>
+        Saved as the items stand in the editor, sources and macros included.
       </div>
     </Dialog>
   );

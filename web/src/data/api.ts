@@ -313,11 +313,21 @@ async function insertEntry(row: {
   return data as Entry;
 }
 
-export const logWeight = (value: number, unit: 'lb' | 'kg') =>
-  insertEntry({ module_slug: 'weight', value, unit, label: value.toFixed(1) });
+/**
+ * When something is being logged for. Absent means now; the dashboard sets it
+ * when a past day is picked in the week strip, so the entry lands on that day.
+ */
+export interface When {
+  occurred_at: string;
+  local_date: string;
+}
 
-export const logPages = (pages: number, book: Book | null, note?: string) =>
+export const logWeight = (value: number, unit: 'lb' | 'kg', when?: When) =>
+  insertEntry({ module_slug: 'weight', value, unit, label: value.toFixed(1), ...when });
+
+export const logPages = (pages: number, book: Book | null, note?: string, when?: When) =>
   insertEntry({
+    ...when,
     module_slug: 'reading',
     value: pages,
     unit: 'pages',
@@ -326,8 +336,9 @@ export const logPages = (pages: number, book: Book | null, note?: string) =>
     payload: book ? { book_id: book.id, end_page: book.current_page + pages } : {},
   });
 
-export const logRun = (miles: number, unit: 'mi' | 'km', seconds: number | null) =>
+export const logRun = (miles: number, unit: 'mi' | 'km', seconds: number | null, when?: When) =>
   insertEntry({
+    ...when,
     module_slug: 'running',
     value: miles,
     unit,
@@ -335,8 +346,8 @@ export const logRun = (miles: number, unit: 'mi' | 'km', seconds: number | null)
     payload: seconds ? { duration_s: seconds } : {},
   });
 
-export const logSleep = (hours: number) =>
-  insertEntry({ module_slug: 'sleep', value: hours, unit: 'h', label: `${hours} h` });
+export const logSleep = (hours: number, when?: When) =>
+  insertEntry({ module_slug: 'sleep', value: hours, unit: 'h', label: `${hours} h`, ...when });
 
 export async function logMeal(label: string, items: MealItem[], occurredAt?: string): Promise<string> {
   const { data, error } = await supabase.rpc('log_meal', {
@@ -348,10 +359,41 @@ export async function logMeal(label: string, items: MealItem[], occurredAt?: str
   return data as string;
 }
 
-export async function logSavedMeal(savedMealId: string): Promise<string> {
-  const { data, error } = await supabase.rpc('log_saved_meal', { p_saved_meal_id: savedMealId });
+export async function logSavedMeal(savedMealId: string, when?: When): Promise<string> {
+  const { data, error } = await supabase.rpc('log_saved_meal', {
+    p_saved_meal_id: savedMealId,
+    ...(when ? { p_occurred_at: when.occurred_at } : {}),
+  });
   if (error) throw error;
   return data as string;
+}
+
+/**
+ * Save a combination from the items chosen in the Edit panel — as they stand
+ * there, edits included — remembering the entry it came from.
+ */
+export async function saveCombination(name: string, items: MealItem[], sourceEntryId: string | null): Promise<SavedMeal> {
+  const me = await myId();
+  const clean = items.map(({ id: _id, ...rest }) => rest);
+  const { data, error } = await supabase
+    .from('saved_meals')
+    .insert({
+      user_id: me,
+      name,
+      detail: clean.map((i) => (i.portion ? `${i.name} ${i.portion}` : i.name)).join(' · '),
+      kcal: clean.reduce((sum, i) => sum + (Number(i.kcal) || 0), 0),
+      items: clean,
+      source_entry_id: sourceEntryId,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as SavedMeal;
+}
+
+export async function deleteSavedMeal(id: string): Promise<void> {
+  const { error } = await supabase.from('saved_meals').delete().eq('id', id);
+  if (error) throw error;
 }
 
 export async function saveMealFromEntry(entryId: string, name: string, itemIds?: string[]): Promise<string> {
@@ -374,8 +416,9 @@ export interface ParseResult {
   message?: string;
 }
 
-export const parseLog = (text: string) =>
-  callFunction<ParseResult>('parse-log', { text, now: new Date().toISOString() });
+/** `now` places the line's entries on a picked day; it defaults to this moment. */
+export const parseLog = (text: string, now?: string) =>
+  callFunction<ParseResult>('parse-log', { text, now: now ?? new Date().toISOString() });
 
 export interface PendingDraft {
   draft: Draft;
@@ -555,8 +598,10 @@ export const logWritingSession = (
   amount: number,
   measure: WritingMeasure,
   note?: string,
+  when?: When,
 ) =>
   insertEntry({
+    ...when,
     module_slug: 'writing',
     value: amount,
     unit: measure,

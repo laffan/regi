@@ -18,6 +18,7 @@ import {
   useDailyTotals,
   useEntries,
   useGoals,
+  useDeleteSavedMeal,
   useLogSavedMeal,
   useModules,
   useProfile,
@@ -57,6 +58,7 @@ export function ModuleDetail() {
   const setActive = useSetModuleActive();
   const setSettings = useSetModuleSettings();
   const quickAdd = useLogSavedMeal();
+  const deleteSaved = useDeleteSavedMeal();
   const addGoal = useAddGoal();
 
   const series = useMemo(() => buildSeriesIndex(totals.data), [totals.data]);
@@ -325,12 +327,13 @@ export function ModuleDetail() {
             <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--line)' }}>
               <div className="kickn">
                 <Icon name="bookmark" />
-                Saved meals
+                Saved combinations
               </div>
               <div style={{ marginTop: 8 }}>
                 {(savedMeals.data ?? []).map((meal) => (
                   <div
                     key={meal.id}
+                    className="chip-group"
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -343,21 +346,38 @@ export function ModuleDetail() {
                       <div style={{ font: "800 13px 'Archivo'" }}>{meal.name}</div>
                       <div style={{ fontSize: 11.5, opacity: 0.6 }}>{meal.detail}</div>
                     </div>
-                    <b style={{ fontSize: 12.5 }}>{group(meal.kcal)}</b>
                     <button
                       type="button"
                       className="btn btn-secondary"
                       style={{ padding: '4px 10px', fontSize: 12 }}
                       disabled={quickAdd.isPending}
-                      onClick={() => quickAdd.mutate(meal.id)}
+                      onClick={() => quickAdd.mutate({ id: meal.id })}
                     >
                       Add
+                    </button>
+                    {/* The figure becomes × on hover: delete, after asking. */}
+                    <button
+                      type="button"
+                      className="btn btn-ghost chip-kcal"
+                      style={{ padding: '4px 6px', fontSize: 12.5, fontWeight: 800 }}
+                      disabled={deleteSaved.isPending}
+                      aria-label={`Delete the saved combination “${meal.name}”`}
+                      onClick={() => {
+                        if (window.confirm(`Delete the saved combination “${meal.name}”? Entries already logged from it stay.`)) {
+                          deleteSaved.mutate(meal.id);
+                        }
+                      }}
+                    >
+                      <span className="kcal" style={{ opacity: 1, color: 'var(--ink)' }}>{group(meal.kcal)}</span>
+                      <span className="x" aria-hidden="true">
+                        ×
+                      </span>
                     </button>
                   </div>
                 ))}
               </div>
               <div style={{ fontSize: 11, opacity: 0.55, marginTop: 8 }}>
-                Save any meal, or a single item, from the log for one-tap entry.
+                Save any logged food, or some of its items, from its Edit panel for one-tap entry.
               </div>
             </div>
           ) : null}

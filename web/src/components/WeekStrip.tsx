@@ -35,6 +35,8 @@ interface Props {
   modules: ModuleDef[];
   totals: TotalsIndex;
   onSelect?: (date: string) => void;
+  /** The day picked to log into, outlined; days after `today` cannot be picked. */
+  selected?: string | null;
   compact?: boolean;
 }
 
@@ -42,7 +44,7 @@ interface Props {
  * One bar per active module, filled on the days that module was logged — and
  * the cell itself filling towards the highlight as more of the set is used.
  */
-export function WeekStrip({ days, today, modules, totals, onSelect, compact }: Props) {
+export function WeekStrip({ days, today, modules, totals, onSelect, selected, compact }: Props) {
   return (
     <div className="wk">
       {days.map((date) => {
@@ -51,7 +53,12 @@ export function WeekStrip({ days, today, modules, totals, onSelect, compact }: P
           loggedOn(totals, d, modules.find((m) => m.slug === slug)!),
         );
         const { style, full } = fillStyle(fraction);
-        const className = [isToday ? 'today' : '', full ? 'full' : ''].filter(Boolean).join(' ') || undefined;
+        const future = date > today;
+        const picked = selected === date && !isToday;
+        const className =
+          [isToday ? 'today' : '', full ? 'full' : '', picked ? 'picked' : '', future ? 'future' : '']
+            .filter(Boolean)
+            .join(' ') || undefined;
         const used = Math.round(fraction * modules.length);
         const label = `${dowShort(date)} ${dayNumber(date)} — ${used} of ${modules.length} modules logged`;
 
@@ -82,7 +89,9 @@ export function WeekStrip({ days, today, modules, totals, onSelect, compact }: P
             className={className}
             style={style}
             onClick={() => onSelect(date)}
-            aria-label={label}
+            disabled={future}
+            aria-pressed={selected ? selected === date : isToday}
+            aria-label={future ? `${label} — not yet` : `${label} — log to this day`}
           >
             {cell}
           </button>

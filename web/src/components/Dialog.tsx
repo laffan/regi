@@ -14,7 +14,11 @@ export function Dialog({ title, onClose, children, actions, wide }: Props) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      // Only the dialog on top closes — a modal opened from a modal leaves
+      // the one beneath it alone.
+      const open = document.querySelectorAll('.dialog');
+      if (open[open.length - 1] === ref.current) onClose();
     };
     document.addEventListener('keydown', onKey);
     ref.current?.querySelector<HTMLElement>('input, button')?.focus();

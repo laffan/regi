@@ -72,7 +72,8 @@ export const useDayClosures = (from: string, to: string) =>
 export function useLogWeight() {
   const done = useInvalidateAfterLog();
   return useMutation({
-    mutationFn: ({ value, unit }: { value: number; unit: 'lb' | 'kg' }) => api.logWeight(value, unit),
+    mutationFn: ({ value, unit, when }: { value: number; unit: 'lb' | 'kg'; when?: api.When }) =>
+      api.logWeight(value, unit, when),
     onSuccess: done,
   });
 }
@@ -80,8 +81,8 @@ export function useLogWeight() {
 export function useLogPages() {
   const done = useInvalidateAfterLog();
   return useMutation({
-    mutationFn: ({ pages, book, note }: { pages: number; book: Book | null; note?: string }) =>
-      api.logPages(pages, book, note),
+    mutationFn: ({ pages, book, note, when }: { pages: number; book: Book | null; note?: string; when?: api.When }) =>
+      api.logPages(pages, book, note, when),
     onSuccess: done,
   });
 }
@@ -89,8 +90,17 @@ export function useLogPages() {
 export function useLogRun() {
   const done = useInvalidateAfterLog();
   return useMutation({
-    mutationFn: ({ miles, unit, seconds }: { miles: number; unit: 'mi' | 'km'; seconds: number | null }) =>
-      api.logRun(miles, unit, seconds),
+    mutationFn: ({
+      miles,
+      unit,
+      seconds,
+      when,
+    }: {
+      miles: number;
+      unit: 'mi' | 'km';
+      seconds: number | null;
+      when?: api.When;
+    }) => api.logRun(miles, unit, seconds, when),
     onSuccess: done,
   });
 }
@@ -103,12 +113,14 @@ export function useLogWritingSession() {
       amount,
       measure,
       note,
+      when,
     }: {
       project: WritingProject | null;
       amount: number;
       measure: WritingMeasure;
       note?: string;
-    }) => api.logWritingSession(project, amount, measure, note),
+      when?: api.When;
+    }) => api.logWritingSession(project, amount, measure, note, when),
     onSuccess: done,
   });
 }
@@ -132,7 +144,10 @@ export function useUpdateWritingProject() {
 
 export function useLogSleep() {
   const done = useInvalidateAfterLog();
-  return useMutation({ mutationFn: (hours: number) => api.logSleep(hours), onSuccess: done });
+  return useMutation({
+    mutationFn: ({ hours, when }: { hours: number; when?: api.When }) => api.logSleep(hours, when),
+    onSuccess: done,
+  });
 }
 
 export function useLogMeal() {
@@ -145,7 +160,27 @@ export function useLogMeal() {
 
 export function useLogSavedMeal() {
   const done = useInvalidateAfterLog();
-  return useMutation({ mutationFn: (id: string) => api.logSavedMeal(id), onSuccess: done });
+  return useMutation({
+    mutationFn: ({ id, when }: { id: string; when?: api.When }) => api.logSavedMeal(id, when),
+    onSuccess: done,
+  });
+}
+
+export function useSaveCombination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, items, sourceEntryId }: { name: string; items: MealItem[]; sourceEntryId: string | null }) =>
+      api.saveCombination(name, items, sourceEntryId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.savedMeals }),
+  });
+}
+
+export function useDeleteSavedMeal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteSavedMeal(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.savedMeals }),
+  });
 }
 
 export function useSaveMealFromEntry() {
@@ -232,21 +267,26 @@ export function useParseLog() {
   const qc = useQueryClient();
   return useMutation({
     mutationKey: PARSE_KEY,
-    mutationFn: (text: string) => api.parseLog(text),
+    // A plain line, or a line placed on a picked day.
+    mutationFn: (input: string | { text: string; now?: string }) =>
+      typeof input === 'string' ? api.parseLog(input) : api.parseLog(input.text, input.now),
     onSettled: () => qc.invalidateQueries({ queryKey: keys.draft }),
   });
 }
+
+const lineOf = (v: unknown): string =>
+  typeof v === 'string' ? v : v && typeof v === 'object' && 'text' in v ? String((v as { text: unknown }).text) : '';
 
 /** Lines sent and still being read and priced — the review column's placeholders. */
 export function useParsing(): { pending: string[]; failed: { text: string; error: string }[] } {
   const pending = useMutationState({
     filters: { mutationKey: PARSE_KEY, status: 'pending' },
-    select: (m) => String(m.state.variables ?? ''),
+    select: (m) => lineOf(m.state.variables),
   });
   const failed = useMutationState({
     filters: { mutationKey: PARSE_KEY, status: 'error' },
     select: (m) => ({
-      text: String(m.state.variables ?? ''),
+      text: lineOf(m.state.variables),
       error: (m.state.error as Error | null)?.message ?? 'could not read that line',
       at: m.state.submittedAt,
     }),

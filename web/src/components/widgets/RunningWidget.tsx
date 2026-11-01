@@ -7,7 +7,7 @@ import { duration, pace } from '@/lib/format';
 import { startOfWeek, weekDays } from '@/lib/dates';
 import type { WidgetProps } from './types';
 
-export function RunningWidget({ compact, today, totals, goals, entries, profile }: WidgetProps) {
+export function RunningWidget({ compact, today, when, totals, goals, entries, profile }: WidgetProps) {
   const log = useLogRun();
 
   const days = weekDays(startOfWeek(today));
@@ -48,7 +48,7 @@ export function RunningWidget({ compact, today, totals, goals, entries, profile 
               ? Number(time[1]) * 3600 + Number(time[2]) * 60 + Number(time[3])
               : Number(time[1]) * 60 + Number(time[2])
             : null;
-          log.mutate({ miles: distance, unit: profile.distance_unit, seconds });
+          log.mutate({ miles: distance, unit: profile.distance_unit, seconds, when });
         }}
       />
 

@@ -62,7 +62,7 @@ module is.
 | `entries` | Every logged thing, with `local_date` as the calendar join key |
 | `meal_items` | The lines of a meal: energy, protein/carbs/fat/fibre, the source, what it matched (`matched_name`) and how the number was reached (`basis`) |
 | `day_closures` | A module day marked complete — Calories' "Last meal of the day" |
-| `books`, `saved_meals` | Reading's shelf and Calories' one-tap combinations |
+| `books`, `saved_meals` | Reading's shelf and Calories' saved combinations (one-tap food), each remembering the entry it was saved from |
 | `writing_projects` | Writing's projects, each with its own measure and target; totals are derived, never stored |
 | `goals` | Goals recur, milestones happen once. Clients currently read only `kind = 'goal'` |
 | `log_drafts`, `log_draft_rows` | Parsed but unapproved — nothing reaches a module from here without review |

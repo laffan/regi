@@ -3,7 +3,7 @@
 // count decide the layout. Two modules get room to breathe, five fall back to
 // the compact variant in a 3-up grid; nothing here is written per module.
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { CrosstalkChart } from '@/components/CrosstalkChart';
 import { GoalsPanel, ModulesPanel } from '@/components/Panels';
 import { WeekStrip, indexTotals } from '@/components/WeekStrip';
@@ -20,7 +20,17 @@ import {
   useWritingProjects,
 } from '@/data/hooks';
 import { buildSeriesIndex } from '@/data/series';
-import { addDays, rangeOfDays, startOfWeek, today as todayISO, weekDays, weekLabel } from '@/lib/dates';
+import {
+  addDays,
+  atNowOn,
+  longDate,
+  rangeOfDays,
+  startOfWeek,
+  today as todayISO,
+  toISODate,
+  weekDays,
+  weekRangeLabel,
+} from '@/lib/dates';
 import { group } from '@/lib/format';
 import { mean, movingMean, type Point } from '@/lib/projection';
 import { readGoal } from '@/modules/goals';
@@ -31,16 +41,21 @@ const HISTORY_DAYS = 90;
 export function Dashboard() {
   const today = todayISO();
   const from = addDays(today, -(HISTORY_DAYS - 1));
+  // A past day picked in the week strip: the widgets show it and log into it.
+  const [picked, setPicked] = useState<string | null>(null);
+  const day = picked && picked < today ? picked : today;
+  const isToday = day === today;
+  const when = isToday ? undefined : { occurred_at: atNowOn(day).toISOString(), local_date: toISODate(atNowOn(day)) };
 
   const profile = useProfile();
   const modules = useModules();
   const totals = useDailyTotals(from, today);
-  const entries = useEntries(today, today);
+  const entries = useEntries(day, day);
   const goals = useGoals();
   const books = useBooks();
   const savedMeals = useSavedMeals();
   const writingProjects = useWritingProjects();
-  const closures = useDayClosures(today, today);
+  const closures = useDayClosures(day, day);
 
   const totalsIndex = useMemo(() => indexTotals(totals.data), [totals.data]);
   const series = useMemo(() => buildSeriesIndex(totals.data), [totals.data]);
@@ -69,7 +84,9 @@ export function Dashboard() {
 
   const widgetProps = {
     compact,
-    today,
+    today: day,
+    isToday,
+    when,
     totals: totalsIndex,
     entries: entries.data ?? [],
     goals: goals.data ?? [],
@@ -102,14 +119,32 @@ export function Dashboard() {
   return (
     <>
       <div className="row-between pad" style={{ paddingBottom: 10 }}>
-        <h4 style={{ margin: 0 }}>{weekLabel(startOfWeek(today))}</h4>
+        {isToday ? (
+          <h4 className="dash-title" style={{ margin: 0 }}>
+            {weekRangeLabel(startOfWeek(today))}
+          </h4>
+        ) : (
+          <h4 className="dash-title picked" style={{ margin: 0, display: 'flex', alignItems: 'baseline', gap: 12 }} aria-live="polite">
+            Adding to {longDate(day)}
+            <button type="button" className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setPicked(null)}>
+              Back to today
+            </button>
+          </h4>
+        )}
         <span style={{ fontSize: 11.5, opacity: 0.55 }}>
           {count} module{count === 1 ? '' : 's'} active
           {count <= 3 ? ` · ${defs.map((d) => d.name).join(', ')}` : ' · compact widgets'}
         </span>
       </div>
 
-      <WeekStrip days={days} today={today} modules={defs} totals={totalsIndex} />
+      <WeekStrip
+        days={days}
+        today={today}
+        modules={defs}
+        totals={totalsIndex}
+        selected={day}
+        onSelect={(date) => setPicked(date === today || date === picked ? null : date)}
+      />
 
       <div className="wgrid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
         {active.map((m) => {

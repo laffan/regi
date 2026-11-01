@@ -6,7 +6,7 @@ import { totalKey } from '@/components/WeekStrip';
 import { startOfWeek, weekDays } from '@/lib/dates';
 import type { WidgetProps } from './types';
 
-export function SleepWidget({ compact, today, totals, goals }: WidgetProps) {
+export function SleepWidget({ compact, today, when, totals, goals }: WidgetProps) {
   const log = useLogSleep();
 
   const hours = totals.get(totalKey(today, 'sleep'))?.value ?? 0;
@@ -32,7 +32,7 @@ export function SleepWidget({ compact, today, totals, goals }: WidgetProps) {
         onSubmit={(text) => {
           const h = Number(text.replace(',', '.').replace(/[^\d.]/g, ''));
           if (!Number.isFinite(h) || h <= 0 || h > 24) return 'Type the hours slept, e.g. 7.5.';
-          log.mutate(h);
+          log.mutate({ hours: h, when });
         }}
       />
 
