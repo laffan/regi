@@ -72,7 +72,8 @@ module is.
 
 Views: `daily_module_totals` (the number the week strip, day list and months
 grid read), `published_series` (crosstalk), `entry_feed` (the log, with meal
-items folded in), `writing_project_totals`, `my_connections`.
+items folded in), `daily_macro_totals` (each day's protein, carbs, fat and fibre,
+for the calendar's mini macro bars), `writing_project_totals`, `my_connections`.
 
 **Two units in one module.** A Writing session is words or minutes, and the
 rollup must never add them together. Two nullable columns on `modules` make that
