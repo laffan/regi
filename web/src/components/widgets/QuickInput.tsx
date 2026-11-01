@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { VoiceButton } from '@/components/VoiceButton';
 
 /**
  * The one way a module is logged from the dashboard: a standard input line
@@ -14,6 +15,7 @@ export function QuickInput({
   busy,
   error,
   onSubmit,
+  voice,
   children,
 }: {
   /** The button: "Log weight", "Log food". */
@@ -26,6 +28,8 @@ export function QuickInput({
   error?: string | null;
   /** Return a message to keep the text and show it; return nothing to clear the line. */
   onSubmit: (text: string) => string | void;
+  /** A microphone beside the button; what is said lands in the line to check. */
+  voice?: boolean;
   /** Anything that belongs to the input itself, under it — a checkbox, a target. */
   children?: ReactNode;
 }) {
@@ -64,6 +68,15 @@ export function QuickInput({
             setProblem(null);
           }}
         />
+        {voice ? (
+          <VoiceButton
+            attached
+            onText={(spoken) => {
+              setText((current) => (current.trim() ? `${current.trim()} ${spoken}` : spoken));
+              setProblem(null);
+            }}
+          />
+        ) : null}
         <button type="submit" className="btn btn-primary" disabled={busy || !text.trim()}>
           {busy ? 'Saving…' : label}
         </button>

@@ -1,10 +1,11 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from '@/data/auth';
 import { useProfile } from '@/data/hooks';
 import { applyAccent } from '@/lib/theme';
-import { setTimeZone } from '@/data/api';
+import { getSchemaVersion, setTimeZone } from '@/data/api';
+import { EXPECTED_SCHEMA, REQUIRED_MIGRATIONS } from '@/lib/schema';
 import { Nav } from '@/components/Nav';
 import { Dashboard } from '@/pages/Dashboard';
 import { LogPage } from '@/pages/Log';
@@ -58,8 +59,19 @@ function SignedIn() {
       });
   }, [zone, qc]);
 
+  const schema = useQuery({ queryKey: ['schema-version'], queryFn: getSchemaVersion, staleTime: Infinity });
+  const behind = schema.isSuccess && (schema.data === null || schema.data < EXPECTED_SCHEMA);
+
   return (
     <div className="app">
+      {behind ? (
+        <div className="error" role="alert" style={{ maxWidth: 1240, margin: '0 auto' }}>
+          <b>The database is behind this version of the app</b> (it reports {schema.data ?? 'no schema version'};
+          expected {EXPECTED_SCHEMA}). Until it is migrated, approved food loses its macros and its sources' detail,
+          and some settings will not save. From <code>app/</code>, run <code>supabase db push</code> — it applies
+          anything missing up to <code>{REQUIRED_MIGRATIONS.at(-1)}</code>.
+        </div>
+      ) : null}
       <Routes>
         <Route
           path="/"

@@ -94,6 +94,13 @@ Functions that must happen atomically are SQL, not edge functions:
 `set_module_share_level` (and the older `set_module_share`), `set_receive`,
 `set_time_zone`, and the tracker functions.
 
+**Schema version.** `schema_version()` returns the newest migration the web
+client depends on. The client compares it with `EXPECTED_SCHEMA` in
+`web/src/lib/schema.ts` and shows a banner when the database is behind, because
+an unmigrated database fails quietly: the original `approve_draft` drops an
+item's macros and provenance. Bump both together in any migration the client
+relies on.
+
 **Time zones.** `local_date` is worked out in `profiles.time_zone`. Accounts
 start on `UTC`; the web client reports the device's zone on sign-in through
 `set_time_zone`, which re-dates existing entries only when the account was

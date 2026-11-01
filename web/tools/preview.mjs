@@ -222,7 +222,8 @@ await context.route(`**://${SUPABASE_HOST}/**`, async (route) => {
 
   if (url.pathname.startsWith('/rest/v1/rpc/')) {
     const fn = url.pathname.split('/rpc/')[1];
-    const body = fn === 'shared_daily_totals' ? fx.sharedTotals() : [];
+    const body =
+      fn === 'shared_daily_totals' ? fx.sharedTotals() : fn === 'schema_version' ? fx.SCHEMA_VERSION : [];
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   }
 

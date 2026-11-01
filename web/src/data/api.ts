@@ -58,6 +58,13 @@ export async function updateProfile(patch: Partial<Profile>): Promise<void> {
   if (error) throw error;
 }
 
+/** The database's schema version, or null when it predates the check. */
+export async function getSchemaVersion(): Promise<string | null> {
+  const { data, error } = await supabase.rpc('schema_version');
+  if (error) return null;
+  return typeof data === 'string' ? data : null;
+}
+
 // ── modules ─────────────────────────────────────────────────────────────────
 
 export interface ActiveModule extends ModuleRow {

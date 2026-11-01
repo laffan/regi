@@ -47,6 +47,7 @@ export function CaloriesWidget({ compact, today, totals, entries, settings, save
         inputMode="text"
         ariaLabel="What did you eat?"
         placeholder="turkey sandwich and an apple"
+        voice
         onSubmit={(text) => {
           parse.mutate(text);
           navigate('/log');

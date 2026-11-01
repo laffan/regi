@@ -259,7 +259,7 @@ a.src:hover { text-decoration: underline; }
 /* — log — */
 .log-split { display: grid; grid-template-columns: minmax(0, 1fr) 420px; min-height: 620px; }
 .log-main { display: flex; flex-direction: column; border-right: 1px solid var(--line); background: var(--color-bg); }
-.log-input { padding: 16px 20px; border-top: 1px solid var(--line); background: var(--warm); }
+.log-input { padding: 16px 20px; border-bottom: 1px solid var(--line); background: var(--warm); }
 .log-input-row { display: flex; gap: 8px; position: relative; }
 .review { display: flex; flex-direction: column; background: var(--warm); }
 .review-head {
@@ -376,7 +376,8 @@ a.src:hover { text-decoration: underline; }
 
 /* — the dashboard's input line: field and "Log …" button as one control — */
 .qinput-wrap { display: flex; flex-direction: column; gap: 8px; }
-.qinput { display: flex; min-width: 0; }
+.qinput { display: flex; min-width: 0; position: relative; }
+.qinput .log-voice { border-color: var(--color-divider); background: var(--color-surface); }
 .qinput .input { flex: 1; min-width: 0; min-height: 40px; border-right: 0; }
 .qinput .btn { flex: none; min-height: 40px; padding-inline: 14px; white-space: nowrap; }
 .qinput .btn:disabled { opacity: 0.55; }
@@ -394,3 +395,7 @@ a.src:hover { text-decoration: underline; }
 }
 @keyframes skeleton { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+.macro-line { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
+.macro-line > span { display: inline-flex; align-items: center; gap: 4px; }
+.macro-line i { display: inline-block; width: 8px; height: 3px; }
+.macro-line b { font-weight: 800; }

@@ -14,7 +14,16 @@ function pickMime(): string | undefined {
   return ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'].find((t) => MediaRecorder.isTypeSupported(t));
 }
 
-export function VoiceButton({ onText, disabled }: { onText: (text: string) => void; disabled?: boolean }) {
+export function VoiceButton({
+  onText,
+  disabled,
+  attached,
+}: {
+  onText: (text: string) => void;
+  disabled?: boolean;
+  /** Sitting inside a dashboard input line: matched to its height, no gap. */
+  attached?: boolean;
+}) {
   const [state, setState] = useState<'idle' | 'recording' | 'transcribing'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
@@ -92,7 +101,7 @@ export function VoiceButton({ onText, disabled }: { onText: (text: string) => vo
       <button
         type="button"
         className={state === 'recording' ? 'btn btn-secondary log-voice recording' : 'btn btn-secondary log-voice'}
-        style={{ minHeight: 44, minWidth: 44 }}
+        style={attached ? { minHeight: 40, minWidth: 40, padding: '0 10px', borderRight: 0 } : { minHeight: 44, minWidth: 44 }}
         disabled={disabled || state === 'transcribing'}
         aria-pressed={state === 'recording'}
         aria-label={state === 'recording' ? 'Stop recording' : 'Log by voice'}
@@ -103,7 +112,7 @@ export function VoiceButton({ onText, disabled }: { onText: (text: string) => vo
         {state === 'recording' ? `0:${String(seconds).padStart(2, '0')}` : state === 'transcribing' ? 'Listening…' : null}
       </button>
       {error ? (
-        <div className="error" role="status" style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, marginBottom: 8 }}>
+        <div className="error" role="status" style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 8, zIndex: 2 }}>
           {error}
         </div>
       ) : null}

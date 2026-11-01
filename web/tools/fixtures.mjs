@@ -319,3 +319,6 @@ export function sharedTotals() {
 }
 
 export const dayClosures = [{ module_slug: 'calories', local_date: yesterday, closed_at: iso(yesterday, '20:30') }];
+
+// The schema the fixtures stand for; matches web/src/lib/schema.ts.
+export const SCHEMA_VERSION = '20261103000100';

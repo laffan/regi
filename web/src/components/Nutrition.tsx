@@ -54,7 +54,20 @@ export function SourceSummary({ items }: { items: MealItem[] }) {
  * The second rule under the calorie bar: each macro's energy on the same
  * scale as the target, so the two bars line up. Grams in the key beneath.
  */
-export function MacroBar({ items, target, showKey = true }: { items: MealItem[]; target: number; showKey?: boolean }) {
+export function MacroBar({
+  items,
+  target,
+  showKey = true,
+  height,
+}: {
+  items: MealItem[];
+  /** The energy the full width stands for: the day's target on the dashboard,
+   *  the entry's own kcal in the Log. */
+  target: number;
+  showKey?: boolean;
+  /** The Log draws a 3px rule under the number; the dashboard its own height. */
+  height?: number;
+}) {
   const totals = sumMacros(items);
   const energy = macroEnergy(totals.grams);
   const scale = Math.max(target, Object.values(energy).reduce((a, b) => a + b, 0), 1);
@@ -63,6 +76,7 @@ export function MacroBar({ items, target, showKey = true }: { items: MealItem[];
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div
         className="macrobar"
+        style={height ? { height } : undefined}
         role="img"
         aria-label={MACROS.map((m) => `${m.label} ${group(totals.grams[m.key])} g`).join(', ')}
       >
@@ -93,6 +107,23 @@ export function MacroBar({ items, target, showKey = true }: { items: MealItem[];
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** "Protein 24 g · Carbs 60 g · Fiber 4 g · Fat 27 g" — one entry's macros, in a line. */
+export function MacroLine({ items }: { items: MealItem[] }) {
+  const totals = sumMacros(items);
+  if (!totals.known) return <span style={{ opacity: 0.5 }}>no macros recorded</span>;
+  return (
+    <span className="macro-line">
+      {MACROS.map((m) => (
+        <span key={m.key}>
+          <i className={m.className} />
+          {m.short} <b>{group(totals.grams[m.key])}</b>
+        </span>
+      ))}
+      <span style={{ opacity: 0.6 }}>g{totals.known < totals.of ? ` · ${totals.known} of ${totals.of} items` : ''}</span>
+    </span>
   );
 }
 

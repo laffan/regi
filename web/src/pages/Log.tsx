@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/Icon';
 import { EntryEditDialog } from '@/components/EntryEditDialog';
-import { MealItemsEditor, SourceSummary } from '@/components/Nutrition';
+import { MacroBar, MacroLine, MealItemsEditor, SourceSummary } from '@/components/Nutrition';
 import { VoiceButton } from '@/components/VoiceButton';
 import {
   useApproveDraft,
@@ -77,7 +77,40 @@ export function LogPage() {
   return (
     <div className="log-split">
       <div className="log-main">
-        <div style={{ flex: 1, padding: '20px 20px 0' }}>
+        <div className="log-input">
+          <div className="log-input-row">
+            <input
+              ref={inputRef}
+              className="input"
+              style={{ minHeight: 44 }}
+              value={text}
+              placeholder="grilled chicken salad and an iced tea, read 18 pages"
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') submit();
+              }}
+            />
+            <VoiceButton
+              onText={(spoken) => {
+                setText((current) => (current.trim() ? `${current.trim()} ${spoken}` : spoken));
+                inputRef.current?.focus();
+              }}
+            />
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ minHeight: 44, paddingInline: 20 }}
+              onClick={submit}
+              disabled={!text.trim()}
+            >
+              Input
+            </button>
+          </div>
+          <div style={{ fontSize: 11, opacity: 0.5, marginTop: 6 }}>
+            One line, any modules — typed or spoken. Parsed on the server, then shown for review.
+          </div>
+        </div>
+        <div style={{ flex: 1, padding: '20px 20px 24px' }}>
           {entries.isLoading ? <div className="spinner">Loading entries…</div> : null}
 
           {byDay.map(([date, list], index) => (
@@ -148,6 +181,11 @@ export function LogPage() {
                               <SourceSummary items={entry.items as MealItem[]} />
                             </span>
                           ) : null}
+                          {entry.module_slug === 'calories' && entry.items?.length ? (
+                            <div style={{ fontSize: 11.5, marginTop: 2 }}>
+                              <MacroLine items={entry.items as MealItem[]} />
+                            </div>
+                          ) : null}
                           {entry.note ? (
                             <div style={{ fontSize: 11.5, opacity: 0.55 }}>{entry.note}</div>
                           ) : null}
@@ -159,9 +197,18 @@ export function LogPage() {
                           </span>
                         </td>
                         <td style={{ textAlign: 'right', fontWeight: 800 }}>
-                          {entry.module_slug === 'calories'
-                            ? `${group(entry.value ?? 0)} kcal`
-                            : moduleValue(entry.module_slug, entry.value, entry.unit)}
+                          {entry.module_slug === 'calories' ? (
+                            <>
+                              {group(entry.value ?? 0)} kcal
+                              {entry.items?.length ? (
+                                <div style={{ marginTop: 4 }}>
+                                  <MacroBar items={entry.items as MealItem[]} target={entry.value ?? 0} height={3} showKey={false} />
+                                </div>
+                              ) : null}
+                            </>
+                          ) : (
+                            moduleValue(entry.module_slug, entry.value, entry.unit)
+                          )}
                         </td>
                         <td style={{ textAlign: 'right', padding: '0 4px' }}>
                           <button
@@ -187,39 +234,6 @@ export function LogPage() {
           ) : null}
         </div>
 
-        <div className="log-input">
-          <div className="log-input-row">
-            <input
-              ref={inputRef}
-              className="input"
-              style={{ minHeight: 44 }}
-              value={text}
-              placeholder="grilled chicken salad and an iced tea, read 18 pages"
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') submit();
-              }}
-            />
-            <VoiceButton
-              onText={(spoken) => {
-                setText((current) => (current.trim() ? `${current.trim()} ${spoken}` : spoken));
-                inputRef.current?.focus();
-              }}
-            />
-            <button
-              type="button"
-              className="btn btn-primary"
-              style={{ minHeight: 44, paddingInline: 20 }}
-              onClick={submit}
-              disabled={!text.trim()}
-            >
-              Input
-            </button>
-          </div>
-          <div style={{ fontSize: 11, opacity: 0.5, marginTop: 6 }}>
-            One line, any modules — typed or spoken. Parsed on the server, then shown for review.
-          </div>
-        </div>
       </div>
 
       <ReviewColumn
@@ -297,6 +311,30 @@ function ReviewColumn({
         {rows.length ? <span className="tag tag-outline">{locally ? 'parsed locally' : 'parsed'}</span> : null}
       </div>
 
+      {/* Decide first, then read the detail below. */}
+      {rows.length ? (
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line)', display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ flex: 1, justifyContent: 'flex-start', minHeight: 44 }}
+            disabled={busy}
+            onClick={() => void onApprove(ids)}
+          >
+            Approve {rows.length} {rows.length === 1 ? 'entry' : 'entries'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ minHeight: 44 }}
+            disabled={busy}
+            onClick={() => void onDiscard(ids)}
+          >
+            Discard
+          </button>
+        </div>
+      ) : null}
+
       <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
         {failed.map((f, i) => (
           <div className="error" key={`failed-${i}`}>
@@ -339,28 +377,6 @@ function ReviewColumn({
         ))}
       </div>
 
-      {rows.length ? (
-        <div style={{ padding: '14px 18px', borderTop: '1px solid var(--line)', display: 'flex', gap: 8 }}>
-          <button
-            type="button"
-            className="btn btn-primary"
-            style={{ flex: 1, justifyContent: 'flex-start', minHeight: 44 }}
-            disabled={busy}
-            onClick={() => void onApprove(ids)}
-          >
-            Approve {rows.length} {rows.length === 1 ? 'entry' : 'entries'}
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            style={{ minHeight: 44 }}
-            disabled={busy}
-            onClick={() => void onDiscard(ids)}
-          >
-            Discard
-          </button>
-        </div>
-      ) : null}
     </div>
   );
 }
