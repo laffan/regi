@@ -134,7 +134,12 @@ struct ModuleDetailView: View {
     @ViewBuilder
     private func matchTag(_ item: MealItem) -> some View {
         if let ref = item.matchRef, let source = item.matchSource, source != "manual" {
-            Tag(text: "\(source == "usda" ? "USDA" : "OFF") \(ref)", kind: .neutral)
+            switch source {
+            case "openai": Tag(text: "OpenAI estimate", kind: .outline)
+            case "usda": Tag(text: "USDA \(ref)", kind: .neutral)
+            case "off": Tag(text: "OFF \(ref)", kind: .neutral)
+            default: Tag(text: source, kind: .neutral)
+            }
         } else {
             Tag(text: "No match — set by hand", kind: .outline)
         }
@@ -149,7 +154,8 @@ struct GoalsAndMilestones: View {
         let goals = store.goals.filter { $0.moduleSlug == slug }
 
         VStack(alignment: .leading, spacing: 14) {
-            ForEach(["goal", "milestone"], id: \.self) { kind in
+            // Milestones are switched off for now; only recurring goals show.
+            ForEach(["goal"], id: \.self) { kind in
                 let matching = goals.filter { $0.kind == kind }
                 if !matching.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
@@ -216,14 +222,17 @@ struct SourcesPanel: View {
     @EnvironmentObject var store: Store
 
     var body: some View {
-        let order = store.userModule("calories")?.sourceOrder ?? ["usda", "off"]
+        let order = store.userModule("calories")?.sourceOrder ?? ["usda", "off", "openai"]
+        // OpenAI estimates keep their place after the databases; full ordering
+        // and switching them off is in the web app's Calories settings.
+        let tail = order.contains("openai") ? ["openai"] : []
 
         VStack(alignment: .leading, spacing: 10) {
             Kicker(icon: .chart, text: "Sources", muted: true)
 
             ForEach([("usda", "USDA FoodData Central first"), ("off", "Open Food Facts first")], id: \.0) { source, label in
                 Button {
-                    Task { await store.setSourceOrder(source == "usda" ? ["usda", "off"] : ["off", "usda"]) }
+                    Task { await store.setSourceOrder((source == "usda" ? ["usda", "off"] : ["off", "usda"]) + tail) }
                 } label: {
                     HStack(spacing: 8) {
                         Circle()
@@ -364,7 +373,7 @@ struct WritingProjectsPanel: View {
                             }
                         }
                         .font(Theme.font(11, .heavy))
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.accent700)
                     }
 
                     Text(summary(item)).font(Theme.font(11.5)).opacity(0.6)

@@ -1,6 +1,8 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from '@/data/auth';
+import { useProfile } from '@/data/hooks';
+import { applyAccent } from '@/lib/theme';
 import { Nav } from '@/components/Nav';
 import { Dashboard } from '@/pages/Dashboard';
 import { LogPage } from '@/pages/Log';
@@ -23,6 +25,16 @@ export function App() {
   }
 
   if (!session) return <SignIn />;
+
+  return <SignedIn />;
+}
+
+function SignedIn() {
+  const profile = useProfile();
+  const accent = profile.data?.accent_color;
+  useEffect(() => {
+    if (accent) applyAccent(accent);
+  }, [accent]);
 
   return (
     <div className="app">

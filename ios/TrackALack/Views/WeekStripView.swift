@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// One bar per active module, filled on the days that module was logged. The
-/// legend underneath is what makes the bars readable, so the two travel
-/// together.
+/// One bar per active module, filled on the days that module was logged — and
+/// the cell itself filling towards the highlight as more of the set is used:
+/// one of three modules logged is a third of the way there.
 struct WeekStripView: View {
     let days: [String]
     let today: String
@@ -14,9 +14,11 @@ struct WeekStripView: View {
         HStack(spacing: 0) {
             ForEach(Array(days.enumerated()), id: \.element) { index, date in
                 let isToday = date == today
+                let used = modules.filter { totalFor(date, $0.slug)?.isLogged ?? false }.count
+                let fraction = modules.isEmpty ? 0 : Double(used) / Double(modules.count)
 
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(String(Dates.dowShort(date).prefix(1)))
+                    Text(isToday ? "Today" : String(Dates.dowShort(date).prefix(1)))
                         .font(Theme.font(9, .heavy))
                         .kerning(1.2)
                         .opacity(isToday ? 0.9 : 0.55)
@@ -28,7 +30,7 @@ struct WeekStripView: View {
                         ForEach(modules, id: \.slug) { module in
                             let logged = totalFor(date, module.slug)?.isLogged ?? false
                             Rectangle()
-                                .fill(barColour(logged: logged, isToday: isToday))
+                                .fill(logged ? Theme.ink : Theme.ink.opacity(0.16))
                                 .frame(height: 5)
                         }
                     }
@@ -38,8 +40,10 @@ struct WeekStripView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(isToday ? Theme.accent : Theme.bg)
-                .foregroundStyle(isToday ? Theme.bg : Theme.ink)
+                .background(Theme.bg.overlay(Theme.accent.opacity(fraction)))
+                .foregroundStyle(Theme.ink)
+                .overlay { if isToday { Rectangle().strokeBorder(Theme.ink, lineWidth: 2) } }
+                .accessibilityLabel("\(Dates.dowShort(date)) \(Dates.dayNumber(date)), \(used) of \(modules.count) modules logged")
                 .overlay(alignment: .leading) {
                     if index > 0 { Rectangle().fill(Theme.line).frame(width: 1) }
                 }
@@ -52,10 +56,6 @@ struct WeekStripView: View {
         .overlay(alignment: .bottom) { Rule() }
     }
 
-    private func barColour(logged: Bool, isToday: Bool) -> Color {
-        if isToday { return logged ? Theme.bg : Theme.bg.opacity(0.35) }
-        return logged ? Theme.ink : Theme.ink.opacity(0.16)
-    }
 }
 
 /// "One bar per module — Weight, Calories, Reading … logged / none"

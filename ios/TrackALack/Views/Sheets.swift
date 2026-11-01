@@ -63,7 +63,7 @@ struct ParseSheet: View {
     @State private var busy = false
 
     var body: some View {
-        SheetFrame(title: "Log meal") {
+        SheetFrame(title: "Log food") {
             VStack(alignment: .leading, spacing: 14) {
                 Text(prompt).font(Theme.font(12)).opacity(0.7)
 
@@ -106,7 +106,7 @@ struct SheetFrame<Content: View>: View {
                 Spacer()
                 Button("Close") { dismiss() }
                     .font(Theme.font(14, .heavy))
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accent700)
             }
             .padding(.horizontal, 20)
             .padding(.top, 22)

@@ -1,6 +1,7 @@
-// Every read and write the app makes. RLS decides what comes back, so these
-// stay deliberately plain — no user_id filters, no ownership checks in the
-// client.
+// Every read and write the app makes. RLS decides what may come back; the
+// client still filters its own reads to the signed-in account, because RLS
+// also lets a connection's shared rows through, and those belong in the
+// "shared with you" surfaces, not mixed into your own week.
 
 import { supabase, callFunction } from '@/lib/supabase';
 import type {
@@ -11,6 +12,7 @@ import type {
   WritingProject,
   WritingProjectTotals,
   DailyTotal,
+  DayClosure,
   Draft,
   DraftRow,
   Entry,
@@ -20,23 +22,39 @@ import type {
   ModuleSlug,
   Profile,
   SavedMeal,
+  ShareLevel,
+  SharedDayTotal,
   UserModule,
+  IconNode,
 } from '@/lib/types';
+import { registerModules } from '@/modules/registry';
+
+/** The signed-in account, from the local session — no network round trip. */
+async function myId(): Promise<string> {
+  const { data } = await supabase.auth.getSession();
+  const id = data.session?.user.id;
+  if (!id) throw new Error('not signed in');
+  return id;
+}
+
+async function maybeMyId(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user.id ?? null;
+}
 
 // ── account ─────────────────────────────────────────────────────────────────
 
 export async function getProfile(): Promise<Profile | null> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return null;
-  const { data, error } = await supabase.from('profiles').select('*').eq('id', auth.user.id).single();
+  const me = await maybeMyId();
+  if (!me) return null;
+  const { data, error } = await supabase.from('profiles').select('*').eq('id', me).single();
   if (error) throw error;
   return data as Profile;
 }
 
 export async function updateProfile(patch: Partial<Profile>): Promise<void> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error('not signed in');
-  const { error } = await supabase.from('profiles').update(patch).eq('id', auth.user.id);
+  const me = await myId();
+  const { error } = await supabase.from('profiles').update(patch).eq('id', me);
   if (error) throw error;
 }
 
@@ -49,18 +67,23 @@ export interface ActiveModule extends ModuleRow {
 }
 
 export async function getModules(): Promise<ActiveModule[]> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return [];
+  const me = await maybeMyId();
+  if (!me) return [];
 
   const [catalog, mine] = await Promise.all([
     supabase.from('modules').select('*').order('sort_order'),
-    supabase.from('user_modules').select('*').eq('user_id', auth.user.id),
+    supabase.from('user_modules').select('*').eq('user_id', me),
   ]);
   if (catalog.error) throw catalog.error;
   if (mine.error) throw mine.error;
 
+  // The catalog also carries trackers other people share with you, so their
+  // days have a name and an icon. Register them all; list only your own.
+  const rows = catalog.data as ModuleRow[];
+  registerModules(rows);
+
   const byslug = new Map((mine.data as UserModule[]).map((m) => [m.module_slug, m]));
-  return (catalog.data as ModuleRow[]).map((row) => {
+  return rows.filter((row) => !row.owner_id || row.owner_id === me).map((row) => {
     const state = byslug.get(row.slug);
     return {
       ...row,
@@ -72,45 +95,133 @@ export async function getModules(): Promise<ActiveModule[]> {
 }
 
 export async function setModuleActive(slug: ModuleSlug, active: boolean): Promise<void> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error('not signed in');
+  const me = await myId();
   const { error } = await supabase
     .from('user_modules')
-    .upsert({ user_id: auth.user.id, module_slug: slug, active }, { onConflict: 'user_id,module_slug' });
+    .upsert({ user_id: me, module_slug: slug, active }, { onConflict: 'user_id,module_slug' });
   if (error) throw error;
 }
 
 export async function setModuleSettings(slug: ModuleSlug, settings: UserModule['settings']): Promise<void> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error('not signed in');
+  const me = await myId();
   const { error } = await supabase
     .from('user_modules')
     .update({ settings })
-    .eq('user_id', auth.user.id)
+    .eq('user_id', me)
     .eq('module_slug', slug);
   if (error) throw error;
+}
+
+// ── activity trackers ───────────────────────────────────────────────────────
+
+export interface TrackerInput {
+  name: string;
+  icon: string;
+  nodes: IconNode;
+}
+
+export async function createActivity({ name, icon, nodes }: TrackerInput): Promise<string> {
+  const { data, error } = await supabase.rpc('create_activity_module', {
+    p_name: name,
+    p_icon: icon,
+    p_icon_nodes: nodes,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function updateActivity(slug: string, { name, icon, nodes }: TrackerInput): Promise<void> {
+  const { error } = await supabase.rpc('update_activity_module', {
+    p_slug: slug,
+    p_name: name,
+    p_icon: icon,
+    p_icon_nodes: nodes,
+  });
+  if (error) throw error;
+}
+
+export async function deleteActivity(slug: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_activity_module', { p_slug: slug });
+  if (error) throw error;
+}
+
+/**
+ * The tracker's one question. "I did!" records the day; "Not today" removes
+ * that record — a day with no entry is a day it wasn't done.
+ */
+export async function setActivityDone(slug: string, name: string, date: string, done: boolean): Promise<void> {
+  const me = await myId();
+  if (done) {
+    const { data: existing, error: readError } = await supabase
+      .from('entries')
+      .select('id')
+      .eq('user_id', me)
+      .eq('module_slug', slug)
+      .eq('local_date', date)
+      .limit(1);
+    if (readError) throw readError;
+    if (existing?.length) return;
+    await insertEntry({ module_slug: slug, value: 1, unit: 'done', label: name, local_date: date });
+  } else {
+    const { error } = await supabase
+      .from('entries')
+      .delete()
+      .eq('user_id', me)
+      .eq('module_slug', slug)
+      .eq('local_date', date);
+    if (error) throw error;
+  }
 }
 
 // ── the calendar spine ──────────────────────────────────────────────────────
 
 export async function getDailyTotals(fromISO: string, toISO: string, userId?: string): Promise<DailyTotal[]> {
-  let q = supabase
+  const { data, error } = await supabase
     .from('daily_module_totals')
     .select('*')
+    .eq('user_id', userId ?? (await myId()))
     .gte('local_date', fromISO)
     .lte('local_date', toISO)
     .order('local_date', { ascending: false });
-  if (userId) q = q.eq('user_id', userId);
-
-  const { data, error } = await q;
   if (error) throw error;
   return data as DailyTotal[];
+}
+
+/** What connections share with you, at the level each grant allows, minus what you have hidden. */
+export async function getSharedTotals(fromISO: string, toISO: string): Promise<SharedDayTotal[]> {
+  const { data, error } = await supabase.rpc('shared_daily_totals', { p_from: fromISO, p_to: toISO });
+  if (error) throw error;
+  return (data ?? []) as SharedDayTotal[];
+}
+
+export async function getDayClosures(fromISO: string, toISO: string): Promise<DayClosure[]> {
+  const { data, error } = await supabase
+    .from('day_closures')
+    .select('module_slug, local_date, closed_at')
+    .eq('user_id', await myId())
+    .gte('local_date', fromISO)
+    .lte('local_date', toISO);
+  if (error) throw error;
+  return (data ?? []) as DayClosure[];
+}
+
+/** "Last meal of the day": the day's count is complete. Toggling reopens it. */
+export async function setDayClosed(slug: ModuleSlug, date: string, closed: boolean): Promise<void> {
+  const me = await myId();
+  const q = closed
+    ? supabase
+        .from('day_closures')
+        .upsert({ user_id: me, module_slug: slug, local_date: date }, { onConflict: 'user_id,module_slug,local_date' })
+    : supabase.from('day_closures').delete().eq('user_id', me).eq('module_slug', slug).eq('local_date', date);
+  const { error } = await q;
+  if (error) throw error;
 }
 
 export async function getEntries(fromISO: string, toISO: string): Promise<Entry[]> {
   const { data, error } = await supabase
     .from('entry_feed')
     .select('*')
+    .eq('user_id', await myId())
     .gte('local_date', fromISO)
     .lte('local_date', toISO)
     .order('occurred_at', { ascending: false });
@@ -122,6 +233,7 @@ export async function getSeries(series: string, fromISO: string, toISO: string) 
   const { data, error } = await supabase
     .from('published_series')
     .select('local_date, value, unit, module_slug')
+    .eq('user_id', await myId())
     .eq('series', series)
     .gte('local_date', fromISO)
     .lte('local_date', toISO)
@@ -135,6 +247,37 @@ export async function deleteEntry(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Editing a logged entry: what it says, how much, when, and its note. */
+export interface EntryPatch {
+  label?: string | null;
+  value?: number | null;
+  note?: string | null;
+  occurred_at?: string;
+  local_date?: string;
+  payload?: Entry['payload'];
+}
+
+export async function updateEntry(id: string, patch: EntryPatch): Promise<void> {
+  const { error } = await supabase.from('entries').update(patch).eq('id', id);
+  if (error) throw error;
+}
+
+/** A logged meal, edited: its items are replaced and the total re-summed on the server. */
+export async function updateMeal(
+  id: string,
+  input: { label: string; items: MealItem[]; occurred_at: string; local_date: string; note: string | null },
+): Promise<void> {
+  const { error } = await supabase.rpc('update_meal', {
+    p_entry_id: id,
+    p_label: input.label,
+    p_items: input.items,
+    p_occurred_at: input.occurred_at,
+    p_local_date: input.local_date,
+    p_note: input.note ?? '',
+  });
+  if (error) throw error;
+}
+
 // ── logging ─────────────────────────────────────────────────────────────────
 
 async function insertEntry(row: {
@@ -145,14 +288,14 @@ async function insertEntry(row: {
   note?: string | null;
   payload?: Record<string, unknown>;
   occurred_at?: string;
+  local_date?: string;
 }): Promise<Entry> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error('not signed in');
+  const me = await myId();
 
   const { data, error } = await supabase
     .from('entries')
     .insert({
-      user_id: auth.user.id,
+      user_id: me,
       occurred_at: row.occurred_at ?? new Date().toISOString(),
       payload: row.payload ?? {},
       ...row,
@@ -269,20 +412,33 @@ export async function discardDraft(draftId: string): Promise<void> {
   if (error) throw error;
 }
 
+/** A priced item and the other sources' answers, each saying where it came from. */
 export interface FoodLookup {
-  match: {
-    name: string;
-    brand: string | null;
-    source: 'usda' | 'off';
-    ref: string | null;
-  } | null;
-  kcal: number | null;
-  alternates?: { match: FoodLookup['match']; kcal: number | null }[];
+  item: MealItem | null;
+  alternates: MealItem[];
   note: string;
 }
 
 export const lookupFood = (query: string, portion?: string | null) =>
   callFunction<FoodLookup>('food-lookup', { query, portion });
+
+/** Voice logging: speech in, text out. The text goes to the input line for review. */
+export async function transcribe(audio: Blob): Promise<string> {
+  const form = new FormData();
+  const ext = audio.type.includes('mp4') ? 'mp4' : audio.type.includes('ogg') ? 'ogg' : 'webm';
+  form.append('audio', audio, `speech.${ext}`);
+  const { data, error } = await supabase.functions.invoke<{ text: string }>('transcribe', { body: form });
+  if (error) {
+    // The function answers 501 with a reason when no key is configured.
+    const context = (error as { context?: Response }).context;
+    if (context && typeof context.json === 'function') {
+      const body = await context.json().catch(() => null);
+      if (body?.error) throw new Error(body.error);
+    }
+    throw error;
+  }
+  return data?.text ?? '';
+}
 
 // ── module data ─────────────────────────────────────────────────────────────
 
@@ -290,6 +446,7 @@ export async function getBooks(): Promise<Book[]> {
   const { data, error } = await supabase
     .from('books')
     .select('*')
+    .eq('user_id', await myId())
     .order('status')
     .order('created_at', { ascending: false });
   if (error) throw error;
@@ -297,11 +454,10 @@ export async function getBooks(): Promise<Book[]> {
 }
 
 export async function addBook(book: Partial<Book>): Promise<Book> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error('not signed in');
+  const me = await myId();
   const { data, error } = await supabase
     .from('books')
-    .insert({ user_id: auth.user.id, ...book })
+    .insert({ user_id: me, ...book })
     .select()
     .single();
   if (error) throw error;
@@ -316,9 +472,10 @@ export async function addBook(book: Partial<Book>): Promise<Book> {
  * drifting.
  */
 export async function getWritingProjects(): Promise<ProjectWithTotals[]> {
+  const me = await myId();
   const [projects, totals] = await Promise.all([
-    supabase.from('writing_projects').select('*').order('status').order('position'),
-    supabase.from('writing_project_totals').select('*'),
+    supabase.from('writing_projects').select('*').eq('user_id', me).order('status').order('position'),
+    supabase.from('writing_project_totals').select('*').eq('user_id', me),
   ]);
   if (projects.error) throw projects.error;
   if (totals.error) throw totals.error;
@@ -340,11 +497,10 @@ export async function getWritingProjects(): Promise<ProjectWithTotals[]> {
 }
 
 export async function addWritingProject(project: Partial<WritingProject>): Promise<WritingProject> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error('not signed in');
+  const me = await myId();
   const { data, error } = await supabase
     .from('writing_projects')
-    .insert({ user_id: auth.user.id, ...project })
+    .insert({ user_id: me, ...project })
     .select()
     .single();
   if (error) throw error;
@@ -385,10 +541,13 @@ export async function getSavedMeals(): Promise<SavedMeal[]> {
   return data as SavedMeal[];
 }
 
+/** Recurring goals only — milestones are switched off for now. */
 export async function getGoals(): Promise<Goal[]> {
   const { data, error } = await supabase
     .from('goals')
     .select('*')
+    .eq('user_id', await myId())
+    .eq('kind', 'goal')
     .eq('active', true)
     .order('due_on', { nullsFirst: false });
   if (error) throw error;
@@ -396,11 +555,10 @@ export async function getGoals(): Promise<Goal[]> {
 }
 
 export async function addGoal(goal: Partial<Goal>): Promise<Goal> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error('not signed in');
+  const me = await myId();
   const { data, error } = await supabase
     .from('goals')
-    .insert({ user_id: auth.user.id, ...goal })
+    .insert({ user_id: me, ...goal })
     .select()
     .single();
   if (error) throw error;
@@ -460,6 +618,26 @@ export async function setModuleShare(
     p_connection_id: connectionId,
     p_module_slug: slug,
     p_granted: granted,
+  });
+  if (error) throw error;
+}
+
+/** What you send: nothing, presence only, or the full detail. */
+export async function setShareLevel(connectionId: string, slug: ModuleSlug, level: ShareLevel): Promise<void> {
+  const { error } = await supabase.rpc('set_module_share_level', {
+    p_connection_id: connectionId,
+    p_module_slug: slug,
+    p_level: level,
+  });
+  if (error) throw error;
+}
+
+/** What you receive: hide a module someone shares with you, or show it again. */
+export async function setReceive(connectionId: string, slug: ModuleSlug, show: boolean): Promise<void> {
+  const { error } = await supabase.rpc('set_receive', {
+    p_connection_id: connectionId,
+    p_module_slug: slug,
+    p_show: show,
   });
   if (error) throw error;
 }

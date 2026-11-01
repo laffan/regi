@@ -79,7 +79,7 @@ struct SharingPane: View {
                             .padding(.horizontal, 16)
                             .frame(minHeight: 44)
                             .background(Theme.accent)
-                            .foregroundStyle(Theme.bg)
+                            .foregroundStyle(Theme.onAccent)
                     }
                     .buttonStyle(.plain)
                 }
@@ -168,15 +168,15 @@ struct ConnectionRow: View {
                         Button("Decline") { Task { await store.respond(to: connection.id, accept: false) } }
                     }
                     .font(Theme.font(13, .heavy))
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accent700)
                 } else if connection.status == "pending" {
                     Button("Cancel") { Task { await store.removeConnection(connection.id) } }
                         .font(Theme.font(13, .heavy))
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.accent700)
                 } else {
                     Button(editing ? "Done" : "Edit", action: toggleEditing)
                         .font(Theme.font(13, .heavy))
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.accent700)
                 }
             }
 

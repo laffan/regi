@@ -9,8 +9,8 @@
 //
 // `assertCatalogMatches` shouts in development if the two halves drift.
 
-import type { IconName } from '@/components/Icon';
-import type { DailyTotal, ModuleRow, ModuleSlug } from '@/lib/types';
+import type { CustomIcon, IconName } from '@/components/Icon';
+import type { BuiltinSlug, DailyTotal, ModuleRow, ModuleSlug } from '@/lib/types';
 import { group, weight } from '@/lib/format';
 
 export interface DaySummary {
@@ -26,7 +26,9 @@ export interface DaySummary {
 export interface ModuleDef {
   slug: ModuleSlug;
   name: string;
-  icon: IconName;
+  icon: IconName | CustomIcon;
+  /** "activity" for a tracker a person made: one yes/no a day. */
+  kind: 'builtin' | 'activity';
   unit: string;
   valueKind: 'last' | 'sum';
   primarySeries: string;
@@ -51,6 +53,8 @@ export interface DayContext {
   readingGoal: number;
   bookTitle: string | null;
   weightUnit: 'lb' | 'kg';
+  /** Days whose Calories count was closed with "Last meal of the day". */
+  closedCalorieDays?: Set<string>;
 }
 
 const notLogged: DaySummary = { text: 'not logged' };
@@ -67,9 +71,10 @@ function measureParts(day: DailyTotal | undefined): string[] {
     .map(([unit, value]) => `${group(Number(value))} ${labels[unit] ?? unit}`);
 }
 
-export const MODULES: Record<ModuleSlug, ModuleDef> = {
+export const MODULES: Record<BuiltinSlug, ModuleDef> = {
   weight: {
     slug: 'weight',
+    kind: 'builtin',
     name: 'Weight',
     icon: 'scale',
     unit: 'lb',
@@ -84,6 +89,7 @@ export const MODULES: Record<ModuleSlug, ModuleDef> = {
 
   calories: {
     slug: 'calories',
+    kind: 'builtin',
     name: 'Calories',
     icon: 'utensils',
     unit: 'kcal',
@@ -91,16 +97,19 @@ export const MODULES: Record<ModuleSlug, ModuleDef> = {
     primarySeries: 'calories.daily',
     publishes: ['calories.daily', 'calories.meals'],
     subscribes: ['weight.daily'],
-    logLabel: 'Log meal',
+    logLabel: 'Log food',
     daySummary: (day, ctx) => {
       if (day?.value == null) return notLogged;
       const over = day.value > ctx.calorieTarget;
+      const closed = ctx.closedCalorieDays?.has(day.local_date);
       return {
         text: group(day.value),
         bar: { pct: Math.min(day.value / ctx.calorieTarget, 1) * 100, over },
         note: over
-          ? `over by ${group(day.value - ctx.calorieTarget)}`
-          : `${day.entry_count} meal${day.entry_count === 1 ? '' : 's'}`,
+          ? `over by ${group(day.value - ctx.calorieTarget)}${closed ? ' · day closed' : ''}`
+          : closed
+            ? `${group(ctx.calorieTarget - day.value)} under · day closed`
+            : `${day.entry_count} ${day.entry_count === 1 ? 'entry' : 'entries'}`,
         over,
       };
     },
@@ -108,6 +117,7 @@ export const MODULES: Record<ModuleSlug, ModuleDef> = {
 
   reading: {
     slug: 'reading',
+    kind: 'builtin',
     name: 'Reading',
     icon: 'book-open',
     unit: 'pages',
@@ -127,6 +137,7 @@ export const MODULES: Record<ModuleSlug, ModuleDef> = {
 
   running: {
     slug: 'running',
+    kind: 'builtin',
     name: 'Running',
     icon: 'run',
     unit: 'mi',
@@ -141,6 +152,7 @@ export const MODULES: Record<ModuleSlug, ModuleDef> = {
 
   writing: {
     slug: 'writing',
+    kind: 'builtin',
     name: 'Writing',
     icon: 'pencil',
     unit: 'words',
@@ -162,6 +174,7 @@ export const MODULES: Record<ModuleSlug, ModuleDef> = {
 
   sleep: {
     slug: 'sleep',
+    kind: 'builtin',
     name: 'Sleep',
     icon: 'bell',
     unit: 'h',
@@ -174,7 +187,50 @@ export const MODULES: Record<ModuleSlug, ModuleDef> = {
   },
 };
 
-export const MODULE_ORDER: ModuleSlug[] = ['weight', 'calories', 'reading', 'running', 'writing', 'sleep'];
+export const MODULE_ORDER: BuiltinSlug[] = ['weight', 'calories', 'reading', 'running', 'writing', 'sleep'];
+
+// ── activity trackers ───────────────────────────────────────────────────────
+// A person's own modules arrive with the catalog; their definitions are built
+// here from the row, so every surface that asks moduleDef() gets one.
+
+const custom = new Map<string, ModuleDef>();
+
+export function activityDef(row: Pick<ModuleRow, 'slug' | 'name' | 'icon' | 'icon_nodes' | 'primary_series'>): ModuleDef {
+  return {
+    slug: row.slug,
+    kind: 'activity',
+    name: row.name,
+    icon: row.icon_nodes?.length ? { name: row.icon, nodes: row.icon_nodes } : 'activity',
+    unit: 'done',
+    valueKind: 'last',
+    primarySeries: row.primary_series,
+    publishes: [row.primary_series],
+    subscribes: [],
+    logLabel: 'I did!',
+    daySummary: (day) => (day && (day.value ?? 0) > 0 ? { text: 'done' } : notLogged),
+  };
+}
+
+/** Called whenever the catalog loads, so trackers resolve like built-ins. */
+export function registerModules(rows: ModuleRow[]): void {
+  custom.clear();
+  for (const row of rows) {
+    if (row.kind === 'activity') custom.set(row.slug, activityDef(row));
+  }
+}
+
+const unknownModule = (slug: string): ModuleDef => ({
+  ...activityDef({ slug, name: 'Module', icon: 'activity', icon_nodes: null, primary_series: slug }),
+  name: 'Unavailable module',
+});
+
+export function isBuiltin(slug: string): slug is BuiltinSlug {
+  return slug in MODULES;
+}
+
+function allDefs(): ModuleDef[] {
+  return [...MODULE_ORDER.map((s) => MODULES[s]), ...custom.values()];
+}
 
 /**
  * Crosstalk widgets. Each one reads two published series and owns neither —
@@ -212,16 +268,16 @@ export const CROSSTALK: CrosstalkDef[] = [
 ];
 
 export function moduleDef(slug: string): ModuleDef {
-  return MODULES[slug as ModuleSlug] ?? MODULES.weight;
+  return (isBuiltin(slug) ? MODULES[slug] : custom.get(slug)) ?? unknownModule(slug);
 }
 
 /** Crosstalk: which modules can read a given series. */
 export function subscribersOf(series: string): ModuleDef[] {
-  return MODULE_ORDER.map((s) => MODULES[s]).filter((m) => m.subscribes.includes(series));
+  return allDefs().filter((m) => m.subscribes.includes(series));
 }
 
 export function publisherOf(series: string): ModuleDef | undefined {
-  return MODULE_ORDER.map((s) => MODULES[s]).find((m) => m.publishes.includes(series));
+  return allDefs().find((m) => m.publishes.includes(series));
 }
 
 /** Development-only guard against this file and the catalog table drifting. */
@@ -229,7 +285,8 @@ export function assertCatalogMatches(rows: ModuleRow[]): void {
   if (!import.meta.env.DEV) return;
 
   for (const row of rows) {
-    const def = MODULES[row.slug];
+    if (row.kind === 'activity') continue;
+    const def = isBuiltin(row.slug) ? MODULES[row.slug] : undefined;
     if (!def) {
       console.warn(`[modules] "${row.slug}" is in the catalog but has no client definition.`);
       continue;

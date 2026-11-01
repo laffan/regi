@@ -2,7 +2,15 @@
 // built app draws the same paths at the same 1.8 stroke rather than a
 // near-miss from a package version bump.
 
-import type { CSSProperties, JSX } from 'react';
+import { createElement, type CSSProperties, type JSX } from 'react';
+import type { IconNode } from '@/lib/types';
+
+/** An icon from outside the built-in set: an activity tracker's, drawn from
+ *  its stored Lucide geometry. */
+export interface CustomIcon {
+  name: string;
+  nodes: IconNode;
+}
 
 export type IconName =
   | 'scale'
@@ -18,7 +26,13 @@ export type IconName =
   | 'grid'
   | 'list'
   | 'calendar'
-  | 'settings';
+  | 'settings'
+  | 'mic'
+  | 'stop'
+  | 'check'
+  | 'plus'
+  | 'trash'
+  | 'activity';
 
 const PATHS: Record<IconName, JSX.Element> = {
   scale: (
@@ -108,10 +122,42 @@ const PATHS: Record<IconName, JSX.Element> = {
       <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" />
     </>
   ),
+  mic: (
+    <>
+      <path d="M12 19v3" />
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+      <rect x="9" y="2" width="6" height="13" rx="3" />
+    </>
+  ),
+  stop: <rect x="6" y="6" width="12" height="12" />,
+  check: <path d="M20 6 9 17l-5-5" />,
+  plus: <path d="M5 12h14M12 5v14" />,
+  trash: (
+    <>
+      <path d="M3 6h18" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </>
+  ),
+  activity: (
+    <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" />
+  ),
 };
 
+/** Lucide geometry as React elements. Only SVG shape tags are drawn. */
+const SHAPES = new Set(['path', 'circle', 'rect', 'line', 'polyline', 'polygon', 'ellipse']);
+
+function drawNodes(nodes: IconNode): JSX.Element[] {
+  return nodes
+    .filter(([tag]) => SHAPES.has(tag))
+    .map(([tag, attrs], i) => {
+      const { key: _key, ...rest } = attrs as Record<string, string | number>;
+      return createElement(tag, { key: i, ...rest });
+    });
+}
+
 interface Props {
-  name: IconName;
+  name: IconName | CustomIcon;
   size?: number;
   className?: string;
   style?: CSSProperties;
@@ -128,7 +174,7 @@ export function Icon({ name, size, className = 'mi', style, title }: Props) {
       style={size ? { width: size, height: size, ...style } : style}
     >
       {title ? <title>{title}</title> : null}
-      {PATHS[name]}
+      {typeof name === 'string' ? PATHS[name] : drawNodes(name.nodes)}
     </svg>
   );
 }

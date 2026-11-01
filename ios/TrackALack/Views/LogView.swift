@@ -61,7 +61,7 @@ struct LogView: View {
                         .padding(.horizontal, 18)
                         .frame(minHeight: 46)
                         .background(Theme.accent)
-                        .foregroundStyle(Theme.bg)
+                        .foregroundStyle(Theme.onAccent)
                 }
                 .buttonStyle(.plain)
                 .disabled(store.busy)
@@ -132,7 +132,7 @@ struct ReviewBlock: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("REVIEW")
                         .font(Theme.font(10, .heavy)).kerning(1.2)
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.accent700)
                     Text("\(store.draftRows.count) draft \(store.draftRows.count == 1 ? "entry" : "entries")")
                         .font(Theme.heading(20))
                 }
@@ -159,7 +159,7 @@ struct ReviewBlock: View {
                         .padding(.horizontal, 14)
                         .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
                         .background(Theme.accent)
-                        .foregroundStyle(Theme.bg)
+                        .foregroundStyle(Theme.onAccent)
                     }
                     .buttonStyle(.plain)
 

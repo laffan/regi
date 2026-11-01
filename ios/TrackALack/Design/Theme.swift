@@ -2,7 +2,8 @@ import SwiftUI
 import UIKit
 
 /// Modernist, warmed — the same tokens the web app takes from `tokens.css`.
-/// Flush-left labels, zero corner radius, hairline rules, one clay-red accent.
+/// Flush-left labels, zero corner radius, hairline rules, one highlight colour
+/// (cornflower by default; the web app lets each account choose its own).
 enum Theme {
     // Colour
     static let bg = Color(hex: 0xFBF8F4)
@@ -12,9 +13,13 @@ enum Theme {
     static let line = Color(hex: 0xE6DED4)
     static let divider = Color(hex: 0xE2D9CF)
 
-    static let accent = Color(hex: 0xC8452A)
-    static let accent100 = Color(hex: 0xFAEEEA)
-    static let accent700 = Color(hex: 0xA1301A)
+    // The highlight. Shades derived as in web tokens.css: 100 is 14% over the
+    // page, 700 is 70% with black (for text on paper). Text on a filled
+    // highlight is ink, which reads on cornflower where paper does not.
+    static let accent = Color(hex: 0x6495ED)
+    static let accent100 = Color(hex: 0xE5EAF3)
+    static let accent700 = Color(hex: 0x4668A6)
+    static let onAccent = Color(hex: 0x2A2320)
 
     static let neutral300 = Color(hex: 0xE2D9CF)
     static let neutral400 = Color(hex: 0xC9BFB4)
@@ -77,7 +82,7 @@ struct Kicker: View {
                 .kerning(1.2)
                 .font(Theme.font(10, .heavy))
         }
-        .foregroundStyle(muted ? Theme.ink.opacity(0.5) : Theme.accent)
+        .foregroundStyle(muted ? Theme.ink.opacity(0.5) : Theme.accent700)
     }
 }
 
@@ -98,7 +103,7 @@ struct LogControl: View {
             .padding(.horizontal, 14)
             .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
             .background(Theme.accent)
-            .foregroundStyle(Theme.bg)
+            .foregroundStyle(Theme.onAccent)
         }
         .buttonStyle(.plain)
         .disabled(busy)
@@ -135,7 +140,7 @@ struct Tag: View {
         switch kind {
         case .accent: return Theme.accent700
         case .neutral: return Theme.ink.opacity(0.8)
-        case .outline: return Theme.accent
+        case .outline: return Theme.accent700
         }
     }
 }

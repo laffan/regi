@@ -45,6 +45,17 @@ Sign in with the seeded account — `you@trackalack.test` / `trackalack`.
 - **Settings** — Sharing (per-module grants, connections by login email),
   Modules, Account.
 
+## Behind the web app
+
+The first feedback round landed on the web first. This app keeps working
+against the new schema — activity trackers show as modules with a generic mark
+and a "I did!" / "Not today" switch, OpenAI-priced items are labelled as
+estimates, milestones and "Coming up" are hidden, the highlight is cornflower,
+and days fill by the share of modules used — but these are web-only so far:
+editing logged entries, voice logging, macros, the per-account highlight
+colour, tracker icons and Track Activity, the Calories goal field and source
+ordering, "Last meal of the day", and the two-way sharing levels.
+
 ## Two deliberate choices
 
 **No Swift package dependencies.** The Supabase client is ~250 lines of

@@ -16,7 +16,11 @@ create table if not exists auth.users (
   raw_app_meta_data  jsonb not null default '{}'::jsonb,
   raw_user_meta_data jsonb not null default '{}'::jsonb,
   created_at         timestamptz not null default now(),
-  updated_at         timestamptz not null default now()
+  updated_at         timestamptz not null default now(),
+  confirmation_token     text,
+  recovery_token         text,
+  email_change           text,
+  email_change_token_new text
 );
 
 create table if not exists auth.identities (

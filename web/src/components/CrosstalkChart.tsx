@@ -8,8 +8,9 @@ import { projectToTarget, type Point } from '@/lib/projection';
 import { shortDate } from '@/lib/dates';
 
 const INK = '#2a2320';
-const ACCENT = '#c8452a';
-const ACCENT_DEEP = '#a1301a';
+// The highlight follows the account's colour, so it is read from CSS.
+const ACCENT = 'var(--color-accent)';
+const ACCENT_DEEP = 'var(--color-accent-700)';
 const BAR = '#e0d7cb';
 const BASELINE = '#d8cec3';
 
@@ -85,8 +86,8 @@ export function CrosstalkChart({
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: H }} role="img" aria-label={ariaLabel}>
         {barTarget ? (
           <>
-            <line x1="0" y1={barY(barTarget)} x2={W} y2={barY(barTarget)} stroke={ACCENT} strokeWidth="1" strokeDasharray="5 4" />
-            <text x="4" y={barY(barTarget) - 4} fontFamily="Archivo" fontSize="10" fill={ACCENT_DEEP}>
+            <line x1="0" y1={barY(barTarget)} x2={W} y2={barY(barTarget)} style={{ stroke: ACCENT }} strokeWidth="1" strokeDasharray="5 4" />
+            <text x="4" y={barY(barTarget) - 4} fontFamily="Archivo" fontSize="10" style={{ fill: ACCENT_DEEP }}>
               {barTargetLabel}
             </text>
           </>
@@ -113,7 +114,7 @@ export function CrosstalkChart({
           <polyline
             points={linePath}
             fill="none"
-            stroke={lineDashed ? INK : ACCENT}
+            style={{ stroke: lineDashed ? INK : ACCENT }}
             strokeWidth="2.5"
             strokeDasharray={lineDashed ? '6 4' : undefined}
           />
@@ -124,12 +125,12 @@ export function CrosstalkChart({
             <polyline
               points={`${xOf(last.date).toFixed(1)},${lineY(last.value).toFixed(1)} ${W - 6},${lineY(goal!.target).toFixed(1)}`}
               fill="none"
-              stroke={ACCENT}
+              style={{ stroke: ACCENT }}
               strokeWidth="2"
               strokeDasharray="5 5"
               opacity="0.65"
             />
-            <circle cx={W - 6} cy={lineY(goal!.target)} r="4.5" fill="#fbf8f4" stroke={ACCENT} strokeWidth="2" />
+            <circle cx={W - 6} cy={lineY(goal!.target)} r="4.5" fill="#fbf8f4" style={{ stroke: ACCENT }} strokeWidth="2" />
             <text
               x={W - 12}
               y={lineY(goal!.target) - 10}
@@ -137,7 +138,7 @@ export function CrosstalkChart({
               fontFamily="Archivo"
               fontSize="10.5"
               fontWeight="700"
-              fill={ACCENT_DEEP}
+              style={{ fill: ACCENT_DEEP }}
             >
               {`${goal!.label} · est. ${shortDate(projection.date)}`}
             </text>

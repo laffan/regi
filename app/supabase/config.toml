@@ -43,3 +43,6 @@ verify_jwt = true
 
 [functions.food-lookup]
 verify_jwt = true
+
+[functions.transcribe]
+verify_jwt = true

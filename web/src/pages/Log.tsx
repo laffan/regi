@@ -3,8 +3,11 @@
 // The log is module-agnostic: one line goes to the server, comes back as typed
 // draft rows, and nothing reaches a module until the review column is approved.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/Icon';
+import { EntryEditDialog } from '@/components/EntryEditDialog';
+import { MealItemsEditor, SourceSummary } from '@/components/Nutrition';
+import { VoiceButton } from '@/components/VoiceButton';
 import {
   useApproveDraft,
   useBooks,
@@ -32,6 +35,8 @@ export function LogPage() {
   const discard = useDiscardDraft();
 
   const [text, setText] = useState('');
+  const [editing, setEditing] = useState<Entry | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const byDay = useMemo(() => {
     const map = new Map<string, Entry[]>();
@@ -74,8 +79,9 @@ export function LogPage() {
                 <colgroup>
                   <col style={{ width: 70 }} />
                   <col />
-                  <col style={{ width: 120 }} />
-                  <col style={{ width: 110 }} />
+                  <col style={{ width: 130 }} />
+                  <col style={{ width: 100 }} />
+                  <col style={{ width: 64 }} />
                 </colgroup>
                 {index === 0 ? (
                   <thead>
@@ -84,6 +90,7 @@ export function LogPage() {
                       <th>Entry</th>
                       <th>Module</th>
                       <th style={{ textAlign: 'right' }}>Value</th>
+                      <th aria-label="Actions" />
                     </tr>
                   </thead>
                 ) : null}
@@ -91,10 +98,15 @@ export function LogPage() {
                   {list.map((entry) => {
                     const def = moduleDef(entry.module_slug);
                     return (
-                      <tr key={entry.id}>
+                      <tr key={entry.id} className="log-row">
                         <td style={{ opacity: 0.6 }}>{timeOfDay(entry.occurred_at)}</td>
                         <td>
                           {entry.label}
+                          {entry.module_slug === 'calories' && entry.items?.length ? (
+                            <span style={{ marginLeft: 8 }}>
+                              <SourceSummary items={entry.items as MealItem[]} />
+                            </span>
+                          ) : null}
                           {entry.note ? (
                             <div style={{ fontSize: 11.5, opacity: 0.55 }}>{entry.note}</div>
                           ) : null}
@@ -109,6 +121,17 @@ export function LogPage() {
                           {entry.module_slug === 'calories'
                             ? `${group(entry.value ?? 0)} kcal`
                             : moduleValue(entry.module_slug, entry.value, entry.unit)}
+                        </td>
+                        <td style={{ textAlign: 'right', padding: '0 4px' }}>
+                          <button
+                            type="button"
+                            className="btn btn-ghost row-edit"
+                            style={{ fontSize: 12 }}
+                            onClick={() => setEditing(entry)}
+                            aria-label={`Edit ${entry.label ?? def.name}`}
+                          >
+                            Edit
+                          </button>
                         </td>
                       </tr>
                     );
@@ -131,6 +154,7 @@ export function LogPage() {
           ) : null}
           <div className="log-input-row">
             <input
+              ref={inputRef}
               className="input"
               style={{ minHeight: 44 }}
               value={text}
@@ -138,6 +162,13 @@ export function LogPage() {
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') submit();
+              }}
+            />
+            <VoiceButton
+              disabled={parse.isPending}
+              onText={(spoken) => {
+                setText((current) => (current.trim() ? `${current.trim()} ${spoken}` : spoken));
+                inputRef.current?.focus();
               }}
             />
             <button
@@ -151,7 +182,7 @@ export function LogPage() {
             </button>
           </div>
           <div style={{ fontSize: 11, opacity: 0.5, marginTop: 6 }}>
-            One line, any modules. Parsed on the server, then shown for review.
+            One line, any modules — typed or spoken. Parsed on the server, then shown for review.
           </div>
         </div>
       </div>
@@ -164,6 +195,8 @@ export function LogPage() {
         onApprove={(id) => approve.mutate(id)}
         onDiscard={(id) => discard.mutate(id)}
       />
+
+      {editing ? <EntryEditDialog entry={editing} onClose={() => setEditing(null)} /> : null}
     </div>
   );
 }
@@ -273,14 +306,39 @@ function DraftCard({
   const def = moduleDef(row.module_slug);
   const items = (row.payload.items ?? []) as MealItem[];
 
-  const patchItem = (index: number, patch: Partial<MealItem>) => {
-    const next = items.map((item, i) => (i === index ? { ...item, ...patch } : item));
-    const total = next.reduce((sum, item) => sum + (Number(item.kcal) || 0), 0);
-    onPatch({ payload: { ...row.payload, items: next }, value: total });
+  // Edits are held here and saved a moment after typing stops, so the draft
+  // is not rewritten on every keystroke.
+  const [draftItems, setDraftItems] = useState<MealItem[]>(items);
+  const dirty = useRef(false);
+  useEffect(() => {
+    if (!dirty.current) return;
+    const timer = window.setTimeout(() => {
+      dirty.current = false;
+      const total = draftItems.reduce((sum, item) => sum + (Number(item.kcal) || 0), 0);
+      onPatch({
+        payload: { ...row.payload, items: draftItems },
+        value: draftItems.some((i) => i.kcal != null) ? total : null,
+      });
+    }, 600);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftItems]);
+
+  const setItems = (next: MealItem[]) => {
+    dirty.current = true;
+    setDraftItems(next);
+  };
+
+  // Leaving the card (say, for Approve) saves at once rather than waiting.
+  const flush = () => {
+    if (!dirty.current) return;
+    dirty.current = false;
+    const total = draftItems.reduce((sum, item) => sum + (Number(item.kcal) || 0), 0);
+    onPatch({ payload: { ...row.payload, items: draftItems }, value: draftItems.some((i) => i.kcal != null) ? total : null });
   };
 
   return (
-    <div className="draft">
+    <div className="draft" onBlur={flush}>
       <div className="draft-head">
         <span className="tag tag-accent">
           <Icon name={def.icon} />
@@ -299,23 +357,8 @@ function DraftCard({
         </span>
       </div>
 
-      {items.length ? (
-        items.map((item, index) => (
-          <div className="draft-row" key={`${row.id}-${index}`}>
-            <input
-              className="input"
-              style={{ flex: 1 }}
-              defaultValue={item.name}
-              onBlur={(e) => patchItem(index, { name: e.target.value })}
-            />
-            <input
-              className="input kcal"
-              defaultValue={item.kcal ?? ''}
-              placeholder="set"
-              onBlur={(e) => patchItem(index, { kcal: e.target.value === '' ? null : Number(e.target.value) })}
-            />
-          </div>
-        ))
+      {row.module_slug === 'calories' ? (
+        <MealItemsEditor items={draftItems} onChange={setItems} />
       ) : (
         <div className="draft-row">
           <input

@@ -22,6 +22,7 @@ export const profile = {
   time_zone: 'America/Los_Angeles',
   weight_unit: 'lb',
   distance_unit: 'mi',
+  accent_color: '#6495ED',
 };
 
 export const modules = [
@@ -33,7 +34,7 @@ export const modules = [
   {
     slug: 'calories', name: 'Calories', icon: 'utensils', unit: 'kcal', value_kind: 'sum',
     primary_series: 'calories.daily', publishes: ['calories.daily', 'calories.meals'],
-    subscribes: ['weight.daily'], log_label: 'Log meal', sort_order: 20,
+    subscribes: ['weight.daily'], log_label: 'Log food', sort_order: 20,
   },
   {
     slug: 'reading', name: 'Reading', icon: 'book-open', unit: 'pages', value_kind: 'sum',
@@ -58,6 +59,16 @@ export const modules = [
     primary_series: 'sleep.hours', publishes: ['sleep.hours'], subscribes: [],
     log_label: 'Log sleep', sort_order: 60,
   },
+  // An activity tracker the account made: one yes/no a day.
+  {
+    slug: 'act-water', name: 'Two litres of water', icon: 'glass-water', unit: 'done', value_kind: 'last',
+    primary_series: 'activity.act-water', publishes: ['activity.act-water'], subscribes: [],
+    log_label: 'I did!', sort_order: 100, owner_id: 'a0000000-0000-4000-8000-000000000001', kind: 'activity',
+    icon_nodes: [
+      ['path', { d: 'M5.116 4.104A1 1 0 0 1 6.11 3h11.78a1 1 0 0 1 .994 1.105L17.19 20.21A2 2 0 0 1 15.2 22H8.8a2 2 0 0 1-2-1.79z' }],
+      ['path', { d: 'M6 12a5 5 0 0 1 6 0 5 5 0 0 0 6 0' }],
+    ],
+  },
 ];
 
 export function userModules(activeSlugs) {
@@ -68,7 +79,7 @@ export function userModules(activeSlugs) {
     position: m.sort_order,
     settings:
       m.slug === 'calories'
-        ? { source_order: ['usda', 'off'], daily_target: 2200 }
+        ? { source_order: ['usda', 'off', 'openai'], daily_target: 2200 }
         : m.slug === 'writing'
           ? { measure: 'words' }
           : {},
@@ -114,6 +125,9 @@ export function dailyTotals() {
 
     // Writing records words and minutes side by side; the day's headline is
     // whichever unit the measure setting picks, and both stay in `measures`.
+    // The water tracker: done most days.
+    if (back % 4 !== 2 && back !== 0) rows.push(row('act-water', 1, 'done', 1, '20:00', { done: 1 }));
+
     if (writing || minutes) {
       const measures = {};
       if (writing) measures.words = writing;
@@ -130,10 +144,10 @@ export function dailyTotals() {
 export const entries = [
   {
     id: 'e1', user_id: profile.id, module_slug: 'calories', occurred_at: iso(TODAY, '14:20'),
-    local_date: TODAY, value: 450, unit: 'kcal', label: 'Yogurt, almonds', note: null, payload: {}, source: 'manual',
+    local_date: TODAY, value: 396, unit: 'kcal', label: 'Yogurt, almonds', note: null, payload: {}, source: 'manual',
     items: [
-      { id: 'i1', name: 'Greek yogurt, plain', portion: '170 g', kcal: 280, match_source: 'manual', match_ref: null },
-      { id: 'i2', name: 'Almonds', portion: '20 g', kcal: 170, match_source: 'usda', match_ref: '170567' },
+      { id: 'i1', name: 'Greek yogurt, plain', portion: '170 g', kcal: 280, match_source: 'openai', match_ref: 'gpt-5.6-sol', matched_name: 'Greek yogurt, whole milk, plain', basis: 'OpenAI estimate for 170 g', protein_g: 15.3, carbs_g: 6.6, fat_g: 8.5, fiber_g: 0 },
+      { id: 'i2', name: 'Almonds', portion: '20 g', kcal: 116, match_source: 'usda', match_ref: '170567', matched_name: 'Nuts, almonds', basis: '20 g × 579 kcal/100 g', protein_g: 4.2, carbs_g: 4.3, fat_g: 10, fiber_g: 2.5 },
     ],
   },
   {
@@ -146,17 +160,17 @@ export const entries = [
     id: 'e3', user_id: profile.id, module_slug: 'calories', occurred_at: iso(TODAY, '12:35'),
     local_date: TODAY, value: 610, unit: 'kcal', label: 'Turkey sandwich, chips', note: null, payload: {}, source: 'manual',
     items: [
-      { id: 'i3', name: 'Turkey sandwich', portion: '1', kcal: 430, match_source: 'usda', match_ref: '174608' },
-      { id: 'i4', name: 'Kettle chips, sea salt', portion: '28 g', kcal: 180, match_source: 'off', match_ref: '0084114' },
+      { id: 'i3', name: 'Turkey sandwich', portion: '1', kcal: 430, match_source: 'usda', match_ref: '174608', matched_name: 'Sandwich, turkey', basis: '1 × 430 kcal per serving', protein_g: 24, carbs_g: 44, fat_g: 16, fiber_g: 3 },
+      { id: 'i4', name: 'Kettle chips, sea salt', portion: '28 g', kcal: 180, match_source: 'off', match_ref: '0084114', matched_name: 'Sea salt kettle chips', basis: '28 g × 643 kcal/100 g', protein_g: 2, carbs_g: 16, fat_g: 11, fiber_g: 1 },
     ],
   },
   {
     id: 'e4', user_id: profile.id, module_slug: 'calories', occurred_at: iso(TODAY, '07:10'),
-    local_date: TODAY, value: 420, unit: 'kcal', label: 'Oats, banana, coffee', note: null, payload: {}, source: 'manual',
+    local_date: TODAY, value: 411, unit: 'kcal', label: 'Oats, banana, coffee', note: null, payload: {}, source: 'manual',
     items: [
-      { id: 'i5', name: 'Rolled oats', portion: '80 g', kcal: 304, match_source: 'usda', match_ref: '169705' },
-      { id: 'i6', name: 'Banana', portion: '1 medium', kcal: 105, match_source: 'usda', match_ref: '173944' },
-      { id: 'i7', name: 'Black coffee', portion: '240 ml', kcal: 11, match_source: 'usda', match_ref: '171890' },
+      { id: 'i5', name: 'Rolled oats', portion: '80 g', kcal: 304, match_source: 'usda', match_ref: '169705', matched_name: 'Oats', basis: '80 g × 379 kcal/100 g', protein_g: 10.5, carbs_g: 54, fat_g: 5.2, fiber_g: 8 },
+      { id: 'i6', name: 'Banana', portion: '1 medium', kcal: 105, match_source: 'usda', match_ref: '173944', matched_name: 'Bananas, raw', basis: '1 × 105 kcal per serving (118 g)', protein_g: 1.3, carbs_g: 27, fat_g: 0.4, fiber_g: 3.1 },
+      { id: 'i7', name: 'Black coffee', portion: '240 ml', kcal: 2, match_source: 'manual', match_ref: null, matched_name: null, basis: 'stated in the log', protein_g: 0.3, carbs_g: 0, fat_g: 0, fiber_g: 0 },
     ],
   },
   {
@@ -225,8 +239,8 @@ export const draftRows = [
     value: 522, unit: 'kcal', occurred_at: iso(TODAY, '18:45'),
     payload: {
       items: [
-        { name: 'Grilled chicken salad', portion: null, kcal: 520, match_source: 'usda', match_ref: '171534' },
-        { name: 'Iced tea, unsweetened', portion: null, kcal: 2, match_source: 'off', match_ref: '0074780' },
+        { name: 'Grilled chicken salad', portion: null, kcal: 520, match_source: 'usda', match_ref: '171534', matched_name: 'Salad, grilled chicken', basis: 'no weight given — assumed 100 g at 520 kcal/100 g', protein_g: 38, carbs_g: 12, fat_g: 34, fiber_g: 4 },
+        { name: 'Iced tea, unsweetened', portion: null, kcal: 2, match_source: 'off', match_ref: '0074780', matched_name: 'Unsweetened iced tea', basis: '1 × 2 kcal per serving (500 ml)', protein_g: 0, carbs_g: 0.5, fat_g: 0, fiber_g: 0 },
       ],
     },
     match_note: 'USDA · 2 matches', position: 0,
@@ -242,16 +256,19 @@ export const connections = [
   {
     id: 'c1', status: 'active', created_at: '2026-08-18', requester_id: profile.id,
     addressee_id: 'a2', other_id: 'a2', i_requested: true,
-    i_share: ['weight', 'reading'], they_share: ['reading'],
+    i_share: ['reading', 'weight'], they_share: ['reading'],
+    i_share_detail: { weight: 'presence', reading: 'full' }, they_share_detail: { reading: 'full' }, i_mute: [],
   },
   {
     id: 'c2', status: 'active', created_at: '2026-08-27', requester_id: 'a3',
     addressee_id: profile.id, other_id: 'a3', i_requested: false,
     i_share: ['calories'], they_share: ['calories', 'weight'],
+    i_share_detail: { calories: 'full' }, they_share_detail: { calories: 'presence', weight: 'full' }, i_mute: ['weight'],
   },
   {
     id: 'c3', status: 'pending', created_at: '2026-09-02', requester_id: profile.id,
     addressee_id: 'a4', other_id: 'a4', i_requested: true, i_share: [], they_share: [],
+    i_share_detail: {}, they_share_detail: {}, i_mute: [],
   },
 ];
 
@@ -284,3 +301,21 @@ export const writingProjectTotals = [
   { project_id: 'wp2', words: 0, minutes: 697, sessions: 29, last_on: TODAY, first_on: '2026-07-20' },
   { project_id: 'wp3', words: 3120, minutes: 0, sessions: 11, last_on: '2026-07-02', first_on: '2026-06-15' },
 ];
+
+// What connections share back: Marcus's reading in full, Priya's calories as
+// presence only (no number), her weight hidden by the viewer.
+export function sharedTotals() {
+  const rows = [];
+  for (let back = 0; back < 30; back++) {
+    const date = daysAgo(back);
+    if (back % 3 !== 1) {
+      rows.push({ owner_id: 'a2', local_date: date, module_slug: 'reading', detail: 'full', entry_count: 1, value: 15 + ((back * 7) % 30), unit: 'pages', measures: null });
+    }
+    if (back % 5 !== 3) {
+      rows.push({ owner_id: 'a3', local_date: date, module_slug: 'calories', detail: 'presence', entry_count: 3, value: null, unit: null, measures: null });
+    }
+  }
+  return rows;
+}
+
+export const dayClosures = [{ module_slug: 'calories', local_date: yesterday, closed_at: iso(yesterday, '20:30') }];

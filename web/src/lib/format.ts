@@ -28,7 +28,8 @@ export function moduleValue(slug: string, value: number | null, unit: string | n
     case 'sleep':
       return `${value.toFixed(1)} h`;
     default:
-      return group(value);
+      // Activity trackers record a day as done.
+      return unit === 'done' ? (value > 0 ? 'Done' : 'Not done') : group(value);
   }
 }
 

@@ -32,8 +32,13 @@ Each has its own README with setup, and they share one model:
   can render a day summary and the whole app agrees on what "Tuesday" means.
 - **Nothing writes to a module without review.** The Log is module-agnostic:
   text in, parsed on the server, typed draft rows out, approved by hand.
-- **Sharing is per module.** Granting Weight does not grant Calories, and a
-  grant can be withdrawn without dropping the connection.
+- **Sharing is per module, in both directions.** For each module you choose
+  what a connection gets — nothing, only whether you logged that day, or the
+  full detail — and for each module they share you choose whether to see it.
+  A grant can be changed or withdrawn without dropping the connection.
+- **Every calorie says where it came from.** An item records its source
+  (USDA, Open Food Facts, an OpenAI estimate, or set by hand), what it was
+  matched to, and the arithmetic behind the number.
 
 ## Getting it running
 
@@ -56,16 +61,31 @@ data, standing at the numbers the designs show on 2026-09-07.
 
 | Module | Records | Publishes |
 | --- | --- | --- |
-| Weight | A weigh-in, set by dragging rather than typed | `weight.daily` |
-| Calories | Meals, priced against USDA FoodData Central and Open Food Facts | `calories.daily`, `calories.meals` |
+| Weight | A weigh-in, typed into one large field | `weight.daily` |
+| Calories | Food with protein, carbs, fibre and fat, priced against USDA FoodData Central, Open Food Facts and (labelled as estimates) OpenAI | `calories.daily`, `calories.meals` |
 | Reading | Pages against a book you add, with an optional note | `reading.pages`, `reading.books` |
 | Running | Distance and time | `running.miles`, `running.pace` |
 | Writing | Sessions against a project, in words **or** minutes | `writing.words`, `writing.minutes`, `writing.projects` |
 | Sleep | Hours | `sleep.hours` |
 
 Weight, Calories and Reading are on for a new account; the rest are opt-in.
-Adding a seventh means a row in `modules`, a definition in each client's
-registry, and a widget — no changes to the dashboard, the calendar or the log.
+Adding a seventh built-in means a row in `modules`, a definition in each
+client's registry, and a widget — no changes to the dashboard, the calendar or
+the log.
+
+**Activity trackers** are modules people make for themselves (Settings →
+Modules → Track Activity): a name, an icon from the Lucide set, and a daily
+"I did!" / "Not today" switch. They live in `modules` with an owner, publish
+`activity.<slug>`, and appear everywhere a built-in does. The icon's geometry
+is stored with the tracker, so a client can draw it without the icon library.
+
+Each day in the week strip and the months grid fills towards the highlight
+colour by the share of active modules used that day; the colour is a per-account
+setting (Settings → Appearance, cornflower by default).
+
+Goals recur ("under 2,200 daily"). Milestones and the "Coming up" list are
+switched off for now — the `goals` table still holds milestone rows, the
+clients just do not ask for them.
 
 Writing is the one that keeps projects: a novel counted in words, morning pages
 counted in minutes, each with its own target. A session belongs to a project and
@@ -74,11 +94,17 @@ is measured in either unit, whatever the project usually uses.
 ## External services
 
 All optional. Without keys the app still runs: log lines fall back to a
-deterministic parser, and an unpriced food becomes a "No match — set by hand"
-row you can fill in.
+deterministic parser, an unpriced food becomes a "No match — set by hand"
+row you can fill in, and the microphone button reports that voice logging is
+not configured.
 
-- **OpenAI (GPT-5.6 Sol)** parses a log line into typed rows.
-- **USDA FoodData Central** and **Open Food Facts** price food. The source order
+- **OpenAI** parses a log line into typed rows (GPT-5.6 Sol by default),
+  estimates energy and macros for foods the databases do not know (always
+  labelled "OpenAI estimate", with the portion it assumed), and transcribes
+  voice logging (`gpt-transcribe` by default). A transcript lands in the input
+  line for review; it is never parsed or saved without you.
+- **USDA FoodData Central** and **Open Food Facts** price food, energy and
+  macros. The order of the three sources, and whether OpenAI is asked at all,
   is a Calories setting; barcodes always resolve through Open Food Facts.
 
 ## What has been verified
@@ -89,7 +115,14 @@ row you can fill in.
   (`./scripts/validate-migrations.sh --seed`). The seed lands on the designed
   numbers exactly.
 - `web/` — typechecks and builds; every screen was driven in Chromium against
-  fixture data and checked against the canvas (`node tools/preview.mjs`).
+  fixture data and checked against the canvas (`node tools/preview.mjs`),
+  including the edit dialog, the tracker dialog, Appearance and the two-way
+  sharing controls.
 - `ios/` — **not compiled.** It was written on Linux, where there is no Xcode.
-- The edge functions have not been executed: that needs a Docker daemon for
-  `supabase start`, which this environment does not have.
+  It has been kept working against the current schema (trackers, the new food
+  source, recurring goals only, the cornflower highlight and the day fill), but
+  editing entries, voice logging, macros, the per-account colour, tracker
+  icons, Track Activity and the sharing levels are web-only so far.
+- The edge functions typecheck against a Deno shim but have not been executed:
+  that needs a Docker daemon for `supabase start`, and no OpenAI, USDA or Open
+  Food Facts call has been made from this environment.

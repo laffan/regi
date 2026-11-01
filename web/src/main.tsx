@@ -6,6 +6,11 @@ import { AuthProvider } from '@/data/auth';
 import { App } from './App';
 import './styles/tokens.css';
 import './styles/app.css';
+import { applyStoredAccent } from '@/lib/theme';
+
+// The last highlight this browser saw, so the first paint is already right;
+// the profile's own value replaces it once it loads.
+applyStoredAccent();
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, refetchOnWindowFocus: false, retry: 1 } },

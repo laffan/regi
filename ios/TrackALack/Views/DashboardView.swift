@@ -22,8 +22,6 @@ struct DashboardView: View {
                 totalFor: { date, slug in store.total(date, slug) }
             )
 
-            StripLegend(modules: store.activeModules)
-
             if store.loading && store.totals.isEmpty {
                 Spacer()
                 ProgressView().padding(40)
@@ -91,7 +89,7 @@ struct ChartCell: View {
                     .font(Theme.font(10))
                     .padding(.horizontal, 8).padding(.vertical, 2)
                     .overlay(Rectangle().stroke(Theme.accent, lineWidth: 1))
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accent700)
             }
 
             CrosstalkChartView(

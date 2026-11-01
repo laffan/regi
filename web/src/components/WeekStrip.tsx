@@ -1,5 +1,5 @@
-import { Icon } from './Icon';
-import { isLogged } from '@/data/series';
+import type { CSSProperties } from 'react';
+import { dayFill, isLogged } from '@/data/series';
 import { dayNumber, dowShort } from '@/lib/dates';
 import type { ModuleDef } from '@/modules/registry';
 import type { DailyTotal } from '@/lib/types';
@@ -14,6 +14,21 @@ export function indexTotals(rows: DailyTotal[] | undefined): TotalsIndex {
   return index;
 }
 
+/** Logged, by the module's own measure: a tracker counts only a day it was done. */
+export function loggedOn(totals: TotalsIndex, date: string, def: Pick<ModuleDef, 'slug' | 'kind'>): boolean {
+  const total = totals.get(totalKey(date, def.slug));
+  return def.kind === 'activity' ? (total?.value ?? 0) > 0 : isLogged(total);
+}
+
+/**
+ * The day's fill as CSS: the highlight at the share of active modules used
+ * that day. Past about 60% the text switches to the on-highlight colour.
+ */
+export function fillStyle(fraction: number): { style: CSSProperties; full: boolean } {
+  const pct = Math.round(fraction * 100);
+  return { style: { ['--fill' as string]: `${pct}%` }, full: pct >= 60 };
+}
+
 interface Props {
   days: string[];
   today: string;
@@ -23,16 +38,27 @@ interface Props {
   compact?: boolean;
 }
 
-/** One bar per active module, filled on the days that module was logged. */
+/**
+ * One bar per active module, filled on the days that module was logged — and
+ * the cell itself filling towards the highlight as more of the set is used.
+ */
 export function WeekStrip({ days, today, modules, totals, onSelect, compact }: Props) {
   return (
     <div className="wk">
       {days.map((date) => {
         const isToday = date === today;
+        const fraction = dayFill(date, modules.map((m) => m.slug), (d, slug) =>
+          loggedOn(totals, d, modules.find((m) => m.slug === slug)!),
+        );
+        const { style, full } = fillStyle(fraction);
+        const className = [isToday ? 'today' : '', full ? 'full' : ''].filter(Boolean).join(' ') || undefined;
+        const used = Math.round(fraction * modules.length);
+        const label = `${dowShort(date)} ${dayNumber(date)} — ${used} of ${modules.length} modules logged`;
+
         const cell = (
           <>
             <div className="dow" style={compact ? { fontSize: 9 } : undefined}>
-              {compact ? dowShort(date)[0] : dowShort(date)}
+              {isToday ? 'Today' : compact ? dowShort(date)[0] : dowShort(date)}
             </div>
             <div className="dnum" style={compact ? { fontSize: 20 } : undefined}>
               {dayNumber(date)}
@@ -41,7 +67,8 @@ export function WeekStrip({ days, today, modules, totals, onSelect, compact }: P
               {modules.map((m) => (
                 <span
                   key={m.slug}
-                  className={isLogged(totals.get(totalKey(date, m.slug))) ? 'mdot on' : 'mdot'}
+                  className={loggedOn(totals, date, m) ? 'mdot on' : 'mdot'}
+                  title={m.name}
                 />
               ))}
             </div>
@@ -52,41 +79,19 @@ export function WeekStrip({ days, today, modules, totals, onSelect, compact }: P
           <button
             key={date}
             type="button"
-            className={isToday ? 'today' : undefined}
+            className={className}
+            style={style}
             onClick={() => onSelect(date)}
-            aria-label={`${dowShort(date)} ${dayNumber(date)}`}
+            aria-label={label}
           >
             {cell}
           </button>
         ) : (
-          <div key={date} className={isToday ? 'today' : undefined}>
+          <div key={date} className={className} style={style} title={label}>
             {cell}
           </div>
         );
       })}
-    </div>
-  );
-}
-
-/** The key the strip needs to be readable: which bar is which module. */
-export function StripLegend({ modules, thick = true }: { modules: ModuleDef[]; thick?: boolean }) {
-  return (
-    <div className="legend">
-      <span style={{ opacity: 0.6 }}>One bar per module —</span>
-      {modules.map((m) => (
-        <span key={m.slug} className="lg-mod">
-          <Icon name={m.icon} />
-          {m.name}
-        </span>
-      ))}
-      <span className="lg-key" style={{ marginLeft: 'auto' }}>
-        <span className="lg-swatch" style={{ height: thick ? 5 : 3 }} />
-        logged
-      </span>
-      <span className="lg-key">
-        <span className="lg-swatch off" style={{ height: thick ? 5 : 3 }} />
-        none
-      </span>
     </div>
   );
 }

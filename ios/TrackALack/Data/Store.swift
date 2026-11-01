@@ -180,28 +180,42 @@ final class Store: ObservableObject {
         let from = Dates.addDays(today, -(historyDays - 1))
         let entriesFrom = Dates.addDays(today, -13)
 
+        // RLS also lets a connection's shared rows through; your own screens
+        // read only your own, so every query names you.
+        guard let me = await Supabase.shared.userId else { return }
+        let mine_ = "eq.\(me)"
+
         do {
-            async let profiles: [Profile] = Supabase.shared.select("profiles")
+            async let profiles: [Profile] = Supabase.shared.select("profiles", filters: ["id": mine_])
             async let catalogRows: [ModuleRow] = Supabase.shared.select("modules", filters: ["order": "sort_order"])
-            async let mine: [UserModule] = Supabase.shared.select("user_modules")
+            async let mine: [UserModule] = Supabase.shared.select("user_modules", filters: ["user_id": mine_])
             async let dailies: [DailyTotal] = Supabase.shared.select(
                 "daily_module_totals",
-                filters: ["local_date": "gte.\(from)", "order": "local_date.desc"]
+                filters: ["user_id": mine_, "local_date": "gte.\(from)", "order": "local_date.desc"]
             )
             async let entries: [Entry] = Supabase.shared.select(
                 "entry_feed",
-                filters: ["local_date": "gte.\(entriesFrom)", "order": "occurred_at.desc"]
+                filters: ["user_id": mine_, "local_date": "gte.\(entriesFrom)", "order": "occurred_at.desc"]
             )
-            async let bookRows: [Book] = Supabase.shared.select("books")
+            async let bookRows: [Book] = Supabase.shared.select("books", filters: ["user_id": mine_])
             async let meals: [SavedMeal] = Supabase.shared.select("saved_meals", filters: ["order": "uses.desc"])
-            async let goalRows: [Goal] = Supabase.shared.select("goals", filters: ["active": "eq.true"])
-            async let projectRows: [WritingProject] = Supabase.shared.select(
-                "writing_projects", filters: ["order": "position"]
+            // Milestones are switched off for now: recurring goals only.
+            async let goalRows: [Goal] = Supabase.shared.select(
+                "goals", filters: ["user_id": mine_, "kind": "eq.goal", "active": "eq.true"]
             )
-            async let projectTotals: [WritingProjectTotals] = Supabase.shared.select("writing_project_totals")
+            async let projectRows: [WritingProject] = Supabase.shared.select(
+                "writing_projects", filters: ["user_id": mine_, "order": "position"]
+            )
+            async let projectTotals: [WritingProjectTotals] = Supabase.shared.select(
+                "writing_project_totals", filters: ["user_id": mine_]
+            )
 
             profile = try await profiles.first
-            catalog = try await catalogRows
+            let rows = try await catalogRows
+            Modules.register(rows)
+            // Your own trackers and the built-ins; someone else's shared
+            // tracker is registered for its name but not listed as yours.
+            catalog = rows.filter { $0.ownerId == nil || $0.ownerId == me }
             userModules = try await mine
             totals = try await dailies
             recentEntries = try await entries
@@ -288,6 +302,23 @@ final class Store: ObservableObject {
         row["user_id"] = userId
         row["occurred_at"] = row["occurred_at"] ?? Dates.isoTimestamp(Date())
         let _: [Entry] = try await Supabase.shared.insert("entries", values: row)
+    }
+
+    /// An activity tracker's one question. "I did!" records the day; "Not
+    /// today" removes that record — a day with no entry is a day it wasn't done.
+    func setActivityDone(_ slug: String, name: String, done: Bool) async {
+        await run {
+            guard let userId = await Supabase.shared.userId else { return }
+            let filters = ["user_id": "eq.\(userId)", "module_slug": "eq.\(slug)", "local_date": "eq.\(today)"]
+            if done {
+                guard total(today, slug) == nil else { return }
+                try await insertEntry([
+                    "module_slug": slug, "value": 1, "unit": "done", "label": name, "local_date": today,
+                ])
+            } else {
+                try await Supabase.shared.delete("entries", filters: filters)
+            }
+        }
     }
 
     func logWeight(_ value: Double) async {

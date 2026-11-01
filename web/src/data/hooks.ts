@@ -4,7 +4,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
-import type { Book, MealItem, ModuleSlug, WritingMeasure, WritingProject } from '@/lib/types';
+import type { Book, MealItem, ModuleSlug, Profile, ShareLevel, WritingMeasure, WritingProject } from '@/lib/types';
 
 export const keys = {
   profile: ['profile'] as const,
@@ -18,10 +18,12 @@ export const keys = {
   draft: ['draft'] as const,
   writingProjects: ['writing-projects'] as const,
   connections: ['connections'] as const,
+  shared: (from: string, to: string) => ['shared', from, to] as const,
+  closures: (from: string, to: string) => ['closures', from, to] as const,
 };
 
 const LOG_TOUCHED = [
-  'totals', 'entries', 'series', 'books', 'goals', 'draft', 'saved-meals', 'writing-projects',
+  'totals', 'entries', 'series', 'books', 'goals', 'draft', 'saved-meals', 'writing-projects', 'closures',
 ];
 
 export function useInvalidateAfterLog() {
@@ -58,6 +60,12 @@ export const useWritingProjects = () =>
 export const usePendingDraft = () => useQuery({ queryKey: keys.draft, queryFn: api.getPendingDraft });
 
 export const useConnections = () => useQuery({ queryKey: keys.connections, queryFn: api.getConnections });
+
+export const useSharedTotals = (from: string, to: string, enabled = true) =>
+  useQuery({ queryKey: keys.shared(from, to), queryFn: () => api.getSharedTotals(from, to), enabled });
+
+export const useDayClosures = (from: string, to: string) =>
+  useQuery({ queryKey: keys.closures(from, to), queryFn: () => api.getDayClosures(from, to) });
 
 // ── writes ──────────────────────────────────────────────────────────────────
 
@@ -146,6 +154,65 @@ export function useSaveMealFromEntry() {
     mutationFn: ({ entryId, name }: { entryId: string; name: string }) =>
       api.saveMealFromEntry(entryId, name),
     onSuccess: done,
+  });
+}
+
+export function useUpdateEntry() {
+  const done = useInvalidateAfterLog();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: api.EntryPatch }) => api.updateEntry(id, patch),
+    onSuccess: done,
+  });
+}
+
+export function useUpdateMeal() {
+  const done = useInvalidateAfterLog();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: Parameters<typeof api.updateMeal>[1] }) =>
+      api.updateMeal(id, input),
+    onSuccess: done,
+  });
+}
+
+export function useSetDayClosed() {
+  const done = useInvalidateAfterLog();
+  return useMutation({
+    mutationFn: ({ slug, date, closed }: { slug: ModuleSlug; date: string; closed: boolean }) =>
+      api.setDayClosed(slug, date, closed),
+    onSuccess: done,
+  });
+}
+
+export function useSetActivityDone() {
+  const done = useInvalidateAfterLog();
+  return useMutation({
+    mutationFn: ({ slug, name, date, done: did }: { slug: string; name: string; date: string; done: boolean }) =>
+      api.setActivityDone(slug, name, date, did),
+    onSuccess: done,
+  });
+}
+
+function useCatalogMutation<T>(fn: (input: T) => Promise<unknown>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.modules });
+      for (const key of LOG_TOUCHED) qc.invalidateQueries({ queryKey: [key] });
+    },
+  });
+}
+
+export const useCreateActivity = () => useCatalogMutation((input: api.TrackerInput) => api.createActivity(input));
+export const useUpdateActivity = () =>
+  useCatalogMutation(({ slug, input }: { slug: string; input: api.TrackerInput }) => api.updateActivity(slug, input));
+export const useDeleteActivity = () => useCatalogMutation((slug: string) => api.deleteActivity(slug));
+
+export function useUpdateProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: Partial<Profile>) => api.updateProfile(patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.profile }),
   });
 }
 
@@ -247,5 +314,21 @@ export const useSetModuleShare = () =>
   useConnectionMutation(({ id, slug, granted }: { id: string; slug: ModuleSlug; granted: boolean }) =>
     api.setModuleShare(id, slug, granted),
   );
+
+export const useSetShareLevel = () =>
+  useConnectionMutation(({ id, slug, level }: { id: string; slug: ModuleSlug; level: ShareLevel }) =>
+    api.setShareLevel(id, slug, level),
+  );
+
+export const useSetReceive = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, slug, show }: { id: string; slug: ModuleSlug; show: boolean }) => api.setReceive(id, slug, show),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.connections });
+      qc.invalidateQueries({ queryKey: ['shared'] });
+    },
+  });
+};
 
 export const useRemoveConnection = () => useConnectionMutation((id: string) => api.removeConnection(id));

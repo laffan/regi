@@ -5,7 +5,7 @@
 
 import { json, preflight, requireUser, serviceClient } from '../_shared/http.ts';
 import { fallbackParse, parseWithOpenAI, type ParseContext, type ParsedRow } from '../_shared/parse.ts';
-import { priceItems, type FoodSource } from '../_shared/food.ts';
+import { matchNote, priceItems, sourceOrder } from '../_shared/food.ts';
 
 Deno.serve(async (req) => {
   const pre = preflight(req);
@@ -28,23 +28,25 @@ Deno.serve(async (req) => {
   if (!text) return json({ error: 'nothing to parse' }, 400);
 
   // ── context the parser needs ──────────────────────────────────────────────
-  const [{ data: modules }, { data: profile }, { data: books }, { data: savedMeals }] = await Promise.all([
-    supabase.from('user_modules').select('module_slug, active, settings').eq('active', true),
+  const [{ data: modules }, { data: profile }, { data: books }, { data: savedMeals }, { data: trackers }] = await Promise.all([
+    supabase.from('user_modules').select('module_slug, active, settings').eq('active', true).eq('user_id', user.id),
     supabase.from('profiles').select('weight_unit, distance_unit, time_zone').eq('id', user.id).single(),
     supabase
       .from('books')
       .select('id, title, current_page, total_pages')
       .eq('status', 'reading')
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(1),
     supabase.from('saved_meals').select('id, name, kcal, items').order('uses', { ascending: false }).limit(20),
+    supabase.from('modules').select('slug, name').eq('kind', 'activity').eq('owner_id', user.id),
   ]);
 
   const activeModules = (modules ?? []).map((m) => m.module_slug as string);
   if (!activeModules.length) return json({ error: 'no active modules' }, 400);
 
   const calorieSettings = (modules ?? []).find((m) => m.module_slug === 'calories')?.settings ?? {};
-  const sourceOrder = (calorieSettings.source_order as FoodSource[] | undefined) ?? ['usda', 'off'];
+  const order = sourceOrder(calorieSettings.source_order);
 
   const ctx: ParseContext = {
     activeModules,
@@ -59,6 +61,9 @@ Deno.serve(async (req) => {
         }
       : null,
     savedMeals: (savedMeals ?? []) as ParseContext['savedMeals'],
+    activities: (trackers ?? [])
+      .filter((t) => activeModules.includes(t.slug as string))
+      .map((t) => ({ slug: t.slug as string, name: t.name as string })),
     now,
   };
 
@@ -93,25 +98,17 @@ Deno.serve(async (req) => {
 
   for (const row of rows) {
     if (row.module !== 'calories') continue;
+    // A saved meal's items already carry their sources; re-pricing would
+    // relabel them "as written".
+    if (row.match_note === 'saved meal') continue;
 
-    const priced = await priceItems(cache, row.items, sourceOrder);
+    const priced = await priceItems(cache, row.items, order);
     row.items = priced.map((p) => ({ name: p.name, portion: p.portion, kcal: p.kcal }));
 
     const matched = priced.filter((p) => p.kcal !== null);
-    const total = matched.reduce((sum, p) => sum + (p.kcal ?? 0), 0);
-    row.value = matched.length ? total : null;
+    row.value = matched.length ? matched.reduce((sum, p) => sum + (p.kcal ?? 0), 0) : null;
 
-    if (row.match_note === null || row.match_note === undefined) {
-      const usda = priced.filter((p) => p.match_source === 'usda').length;
-      const off = priced.filter((p) => p.match_source === 'off').length;
-      const unmatched = priced.length - matched.length;
-
-      const parts: string[] = [];
-      if (usda) parts.push(`USDA · ${usda} match${usda > 1 ? 'es' : ''}`);
-      if (off) parts.push(`Open Food Facts · ${off}`);
-      if (unmatched) parts.push(`${unmatched} to price by hand`);
-      row.match_note = parts.join(' · ') || 'no match — set by hand';
-    }
+    if (row.match_note === null || row.match_note === undefined) row.match_note = matchNote(priced);
 
     // Carry the priced items into the row payload the review screen edits.
     (row as ParsedRow & { priced?: unknown }).priced = priced;

@@ -43,7 +43,7 @@ enum Modules {
             primarySeries: "weight.daily", publishes: ["weight.daily"], subscribes: []
         ),
         "calories": ModuleDef(
-            slug: "calories", name: "Calories", icon: .utensils, unit: "kcal", logLabel: "Log meal",
+            slug: "calories", name: "Calories", icon: .utensils, unit: "kcal", logLabel: "Log food",
             primarySeries: "calories.daily", publishes: ["calories.daily", "calories.meals"],
             subscribes: ["weight.daily"]
         ),
@@ -70,8 +70,28 @@ enum Modules {
 
     static let order = ["weight", "calories", "reading", "running", "writing", "sleep"]
 
+    /// Activity trackers people make for themselves ("act-…"), registered from
+    /// the catalog whenever it loads. They draw a generic mark here: the web
+    /// app draws their chosen Lucide icon from `modules.icon_nodes`, which this
+    /// client does not render yet.
+    static var custom: [String: ModuleDef] = [:]
+
+    static func register(_ rows: [ModuleRow]) {
+        custom = Dictionary(uniqueKeysWithValues: rows
+            .filter { $0.kind == "activity" }
+            .map { row in
+                (row.slug, ModuleDef(
+                    slug: row.slug, name: row.name, icon: .target, unit: "done", logLabel: "I did!",
+                    primarySeries: row.primarySeries, publishes: row.publishes, subscribes: []
+                ))
+            })
+    }
+
     static func def(_ slug: String) -> ModuleDef {
-        all[slug] ?? all["weight"]!
+        all[slug] ?? custom[slug] ?? ModuleDef(
+            slug: slug, name: "Module", icon: .target, unit: "", logLabel: "Log",
+            primarySeries: slug, publishes: [], subscribes: []
+        )
     }
 
     static func publisher(of series: String) -> ModuleDef? {

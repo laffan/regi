@@ -14,7 +14,7 @@ struct ModuleWidget: View {
         case "running": RunningWidget()
         case "writing": WritingWidget()
         case "sleep": SleepWidget()
-        default: EmptyView()
+        default: ActivityWidget(slug: slug)
         }
     }
 }
@@ -159,7 +159,7 @@ struct CaloriesWidget: View {
                 }
             }
 
-            LogControl(label: "Log meal") { composing = true }
+            LogControl(label: "Log food") { composing = true }
         }
         .sheet(isPresented: $composing) {
             // A meal goes through the parser like any other line, so it lands in
@@ -449,11 +449,10 @@ struct SleepWidget: View {
 
 struct GoalsPanel: View {
     @EnvironmentObject var store: Store
-    var title = "Goals & milestones"
+    var title = "Goals"
 
     var body: some View {
         let readouts = GoalReadouts.pick(store.goals, activeSlugs: store.activeSlugs, store: store, slots: 4)
-        let ahead = GoalReadouts.upcoming(store.goals, store: store, limit: 3)
 
         WidgetCell {
             Kicker(icon: .target, text: title, muted: true)
@@ -470,21 +469,69 @@ struct GoalsPanel: View {
                 }
             }
 
-            Rule()
-            Kicker(icon: .flag, text: "Coming up", muted: true)
+        }
+    }
+}
 
-            VStack(alignment: .leading, spacing: 7) {
-                ForEach(ahead, id: \.label) { item in
-                    HStack(alignment: .top, spacing: 8) {
-                        Text(Dates.shortDate(item.date))
-                            .font(Theme.font(12)).opacity(0.55)
-                            .frame(width: 46, alignment: .leading)
-                        Text(item.label)
-                            .font(Theme.font(12))
-                            .foregroundStyle(item.accent ? Theme.accent700 : Theme.ink)
-                    }
+// MARK: - Activity trackers
+
+/// A tracker someone made for themselves: one switch for today — "I did!" or
+/// "Not today" — and the last fortnight beneath it.
+struct ActivityWidget: View {
+    @EnvironmentObject var store: Store
+    let slug: String
+    @State private var busy = false
+
+    var body: some View {
+        let def = Modules.def(slug)
+        let days = Dates.rangeOfDays(store.today, 14)
+        let done = (store.total(store.today, slug)?.value ?? 0) > 0
+
+        WidgetCell {
+            HStack(alignment: .firstTextBaseline) {
+                Kicker(icon: def.icon, text: def.name)
+                Spacer()
+                Text("\(days.filter { (store.total($0, slug)?.value ?? 0) > 0 }.count) of 14 days")
+                    .font(Theme.font(11)).opacity(0.5)
+            }
+
+            HStack(spacing: 3) {
+                ForEach(days, id: \.self) { date in
+                    let did = (store.total(date, slug)?.value ?? 0) > 0
+                    Rectangle()
+                        .fill(did ? (date == store.today ? Theme.accent : Theme.ink) : Theme.ink.opacity(0.1))
+                        .aspectRatio(1, contentMode: .fit)
                 }
             }
+
+            HStack(spacing: 0) {
+                switchHalf("I did!", on: done, fill: Theme.accent, text: Theme.onAccent) { set(true, name: def.name) }
+                switchHalf("Not today", on: !done, fill: Theme.ink.opacity(0.1), text: Theme.ink) { set(false, name: def.name) }
+            }
+            .overlay(Rectangle().stroke(Theme.divider, lineWidth: 1))
+            .disabled(busy)
+            .accessibilityElement(children: .combine)
+            .accessibilityValue(done ? "done today" : "not today")
+        }
+    }
+
+    private func switchHalf(_ label: String, on: Bool, fill: Color, text: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(Theme.font(14, .heavy))
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .padding(.horizontal, 12)
+                .background(on ? fill : Theme.surface)
+                .foregroundStyle(on ? text : Theme.ink)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func set(_ did: Bool, name: String) {
+        busy = true
+        Task {
+            await store.setActivityDone(slug, name: name, done: did)
+            busy = false
         }
     }
 }

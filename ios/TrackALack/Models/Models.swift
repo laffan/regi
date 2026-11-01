@@ -93,11 +93,17 @@ struct ModuleRow: Codable, Identifiable, Equatable {
     let measureSetting: String?
     /// Unit → series name, for modules publishing one series per unit.
     let seriesByUnit: [String: String]?
+    /// "builtin", or "activity" for a tracker a person made. Optional so an
+    /// older backend still decodes.
+    let kind: String?
+    /// The person who made an activity tracker; nil for built-ins.
+    let ownerId: String?
 
     var id: String { slug }
 
     enum CodingKeys: String, CodingKey {
-        case slug, name, icon, unit, publishes, subscribes
+        case slug, name, icon, unit, publishes, subscribes, kind
+        case ownerId = "owner_id"
         case valueKind = "value_kind"
         case primarySeries = "primary_series"
         case logLabel = "log_label"
@@ -122,7 +128,7 @@ struct UserModule: Codable, Identifiable, Equatable {
 
     var calorieTarget: Double { settings["daily_target"]?.doubleValue ?? 2200 }
     var sourceOrder: [String] {
-        settings["source_order"]?.arrayValue?.compactMap(\.stringValue) ?? ["usda", "off"]
+        settings["source_order"]?.arrayValue?.compactMap(\.stringValue) ?? ["usda", "off", "openai"]
     }
 }
 

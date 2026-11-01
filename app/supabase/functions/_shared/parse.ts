@@ -1,3 +1,5 @@
+import { chatJSON, PARSE_MODEL } from './openai.ts';
+
 // One line of text in, typed draft rows out.
 //
 // GPT-5.6 Sol does the reading when a key is configured; the deterministic
@@ -11,6 +13,8 @@ export interface ParseContext {
   distanceUnit: 'mi' | 'km';
   currentBook: { id: string; title: string; current_page: number; total_pages: number | null } | null;
   savedMeals: { id: string; name: string; kcal: number; items: unknown[] }[];
+  /** The user's own yes/no trackers: a row means "did it today". */
+  activities: { slug: string; name: string }[];
   now: string;
 }
 
@@ -239,6 +243,22 @@ export function fallbackParse(raw: string, ctx: ParseContext): ParsedRow[] {
     }
   }
 
+  // Trackers of the user's own: naming one is saying it was done.
+  for (const activity of ctx.activities ?? []) {
+    if (!active.has(activity.slug)) continue;
+    const re = new RegExp(`\\b${escapeRe(activity.name)}\\b`, 'i');
+    if (!re.test(text)) continue;
+    rows.push({
+      ...emptyRow(activity.slug),
+      label: activity.name,
+      value: 1,
+      unit: 'done',
+      occurred_at: at,
+      match_note: 'tracker named',
+    });
+    text = text.replace(re, ' ');
+  }
+
   // A saved meal named outright wins over parsing the words again.
   if (active.has('calories')) {
     const saved = ctx.savedMeals.find((m) => m.name && new RegExp(`\\b${escapeRe(m.name)}\\b`, 'i').test(text));
@@ -277,8 +297,6 @@ function escapeRe(s: string): string {
 }
 
 // ── GPT-5.6 Sol ─────────────────────────────────────────────────────────────
-
-const MODEL = Deno.env.get('OPENAI_MODEL') ?? 'gpt-5.6-sol';
 
 function schemaFor(modules: string[]) {
   return {
@@ -338,43 +356,29 @@ function systemPrompt(ctx: ParseContext): string {
     `Active modules, and the only ones you may use: ${ctx.activeModules.join(', ')}.`,
     'Emit a row only for what the text actually says. Do not invent a row for every module.',
     'Split food into individual items. Never guess a calorie count: leave kcal null unless the text gives a number — the server prices items against USDA FoodData Central and Open Food Facts afterwards.',
+    ctx.activities?.length
+      ? `Yes/no trackers the user made, by module id: ${ctx.activities
+          .map((a) => `${a.slug} = "${a.name}"`)
+          .join(', ')}. When the text says one was done, emit a row for it with value 1, unit "done" and the tracker's name as the label.`
+      : '',
     `Weight is in ${ctx.weightUnit}, distance in ${ctx.distanceUnit}, unless the text says otherwise.`,
     'A bare number on its own is a weigh-in.',
     book,
     saved,
     `The entry is being written at ${ctx.now}.`,
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 export async function parseWithOpenAI(raw: string, ctx: ParseContext): Promise<ParsedRow[]> {
-  const key = Deno.env.get('OPENAI_API_KEY');
-  if (!key) throw new Error('OPENAI_API_KEY not set');
-
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt(ctx) },
-        { role: 'user', content: raw },
-      ],
-      response_format: {
-        type: 'json_schema',
-        json_schema: { name: 'log_rows', strict: true, schema: schemaFor(ctx.activeModules) },
-      },
-    }),
+  const parsed = await chatJSON<{ rows?: Record<string, any>[] }>({
+    model: PARSE_MODEL,
+    name: 'log_rows',
+    schema: schemaFor(ctx.activeModules),
+    system: systemPrompt(ctx),
+    user: raw,
   });
-
-  if (!res.ok) {
-    throw new Error(`OpenAI ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  }
-
-  const body = await res.json();
-  const content = body?.choices?.[0]?.message?.content;
-  if (!content) throw new Error('OpenAI returned no content');
-
-  const parsed = JSON.parse(content) as { rows?: Record<string, any>[] };
   const now = new Date(ctx.now);
 
   return (parsed.rows ?? [])

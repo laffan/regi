@@ -23,11 +23,17 @@
   --color-neutral-800: #444141;
   --color-neutral-900: #2d2b2b;
 
-  --color-accent: #c8452a;
-  --color-accent-100: #faeeea;
-  --color-accent-600: #b03a22;
-  --color-accent-700: #a1301a;
-  --color-accent-800: #7c1405;
+  /* The highlight. One colour per account, set at runtime from the profile
+   * (lib/theme.ts); every shade below is derived from it, so changing the
+   * swatch in Settings → Appearance changes all of them together. */
+  --color-accent: #6495ed;
+  --color-on-accent: #2a2320;
+  --color-accent-100: color-mix(in srgb, var(--color-accent) 14%, var(--color-bg));
+  --color-accent-600: color-mix(in srgb, var(--color-accent) 88%, #000);
+  /* Text in the highlight colour sits on paper, so it uses a deeper shade
+   * that stays legible whatever the swatch. */
+  --color-accent-700: color-mix(in srgb, var(--color-accent) 70%, #000);
+  --color-accent-800: color-mix(in srgb, var(--color-accent) 48%, #000);
 
   /* Shorthands the screens lean on constantly. */
   --ink: #2a2320;
@@ -86,12 +92,13 @@ h5 { font-size: 16px; }
 h6 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
 
 p { margin: 0 0 var(--space-3); }
-a { color: var(--color-accent); text-underline-offset: 3px; }
-a:hover { color: var(--color-accent-700); }
+a { color: var(--color-accent-700); text-underline-offset: 3px; }
+a:hover { color: var(--color-accent-800); }
 img { display: block; max-width: 100%; }
 
 :focus { outline: none; }
 :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+input[type='checkbox'], input[type='radio'] { accent-color: var(--color-accent); }
 ::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent); }
 
 .text-muted { color: color-mix(in srgb, var(--color-text) 55%, transparent); }
@@ -125,13 +132,13 @@ img { display: block; max-width: 100%; }
 }
 .btn svg { display: block; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.btn-primary { background: var(--color-accent); color: var(--color-bg); }
+.btn-primary { background: var(--color-accent); color: var(--color-on-accent); }
 .btn-primary:hover:not(:disabled) { background: var(--color-accent-600); }
 .btn-primary:active:not(:disabled) { background: var(--color-accent-700); }
 .btn-secondary { border-color: var(--color-divider); }
 .btn-secondary:hover:not(:disabled) { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
 .btn-secondary:active:not(:disabled) { background: color-mix(in srgb, var(--color-text) 14%, transparent); }
-.btn-ghost { color: var(--color-accent); padding-inline: var(--space-1); }
+.btn-ghost { color: var(--color-accent-700); padding-inline: var(--space-1); }
 .btn-ghost:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
 .btn-ghost:active { background: color-mix(in srgb, var(--color-accent) 18%, transparent); }
 .btn-icon { width: 36px; height: 36px; padding: 0; }
@@ -198,7 +205,7 @@ textarea.input { min-height: 90px; resize: vertical; }
   white-space: nowrap;
 }
 .seg-opt + .seg-opt { border-left: 1px solid var(--color-divider); }
-.seg-opt:has(input:checked) { background: var(--color-accent); color: var(--color-bg); }
+.seg-opt:has(input:checked) { background: var(--color-accent); color: var(--color-on-accent); }
 .seg-opt:not(:has(input:checked)):hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
 .seg-opt:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 
@@ -214,7 +221,7 @@ textarea.input { min-height: 90px; resize: vertical; }
 }
 .tag-accent { background: var(--color-accent-100); color: var(--color-accent-800); }
 .tag-neutral { background: var(--color-neutral-100); color: var(--color-neutral-800); }
-.tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
+.tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent-700); }
 
 /* — tables — hairlines, not the base system's 2px rules — */
 .table { width: 100%; border-collapse: collapse; font-size: 14px; }

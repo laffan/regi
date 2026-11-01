@@ -80,8 +80,12 @@ function tableFor(url, activeSlugs) {
       return fx.books;
     case 'saved_meals':
       return fx.savedMeals;
-    case 'goals':
-      return fx.goals;
+    case 'goals': {
+      const kind = url.searchParams.get('kind')?.slice(3);
+      return kind ? fx.goals.filter((g) => g.kind === kind) : fx.goals;
+    }
+    case 'day_closures':
+      return fx.dayClosures;
     case 'log_drafts':
       return [fx.draft];
     case 'log_draft_rows':
@@ -100,9 +104,9 @@ function tableFor(url, activeSlugs) {
 async function shoot(page, name, path, click, wait = 900) {
   await page.goto(`http://localhost:${PORT}${path}`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(wait);
-  if (click) {
-    await page.getByText(click, { exact: true }).first().click();
-    await page.waitForTimeout(400);
+  for (const target of [].concat(click ?? [])) {
+    await page.getByText(target, { exact: true }).first().click();
+    await page.waitForTimeout(500);
   }
   await page.screenshot({ path: join(outDir, `${name}.png`), fullPage: true });
 }
@@ -126,6 +130,16 @@ const scenarios = [
     active: ['weight', 'calories', 'reading', 'writing'],
   },
   { name: '1i-settings-sharing', path: '/settings/sharing', active: ['weight', 'calories', 'reading'] },
+  // The first feedback round.
+  { name: 'fb-dashboard-tracker', path: '/', active: ['weight', 'calories', 'reading', 'act-water'] },
+  { name: 'fb-log-edit-meal', path: '/log', active: ['weight', 'calories', 'reading'], click: 'Edit' },
+  { name: 'fb-settings-appearance', path: '/settings/appearance', active: ['weight', 'calories', 'reading'] },
+  { name: 'fb-settings-modules', path: '/settings/modules', active: ['weight', 'calories', 'reading', 'writing', 'act-water'] },
+  { name: 'fb-track-activity', path: '/settings/modules', active: ['weight', 'calories', 'reading'], click: 'Track Activity' },
+  { name: 'fb-sharing-edit', path: '/settings/sharing', active: ['weight', 'calories', 'reading'], click: 'Edit' },
+  { name: 'fb-calendar-shared', path: '/calendar', active: ['weight', 'calories', 'reading', 'act-water'] },
+  { name: 'fb-calendar-months', path: '/calendar', active: ['weight', 'calories', 'reading', 'act-water'], click: 'Months' },
+  { name: 'fb-module-tracker', path: '/module/act-water', active: ['weight', 'calories', 'reading', 'act-water'] },
 ];
 
 const consoleErrors = [];
@@ -177,7 +191,9 @@ await context.route(`**://${SUPABASE_HOST}/**`, async (route) => {
   }
 
   if (url.pathname.startsWith('/rest/v1/rpc/')) {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+    const fn = url.pathname.split('/rpc/')[1];
+    const body = fn === 'shared_daily_totals' ? fx.sharedTotals() : [];
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   }
 
   if (url.pathname.startsWith('/rest/v1/')) {

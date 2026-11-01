@@ -1,5 +1,13 @@
-export type ModuleSlug = 'weight' | 'calories' | 'reading' | 'running' | 'writing' | 'sleep';
-export type FoodSource = 'usda' | 'off' | 'manual' | 'saved';
+/** The modules that ship with the app. */
+export type BuiltinSlug = 'weight' | 'calories' | 'reading' | 'running' | 'writing' | 'sleep';
+/** Any module: a built-in, or an activity tracker a person made ("act-…"). */
+export type ModuleSlug = BuiltinSlug | (string & {});
+export type FoodSource = 'usda' | 'off' | 'openai' | 'manual' | 'saved';
+/** The sources a food can be priced against, in the user's order. */
+export type LookupSource = 'usda' | 'off' | 'openai';
+
+/** An SVG element on the 24×24 icon grid: [tag, attributes]. */
+export type IconNode = [string, Record<string, string | number>][];
 export type EntrySource = 'manual' | 'log' | 'saved_meal' | 'import';
 
 export interface ModuleRow {
@@ -17,6 +25,11 @@ export interface ModuleRow {
   measure_setting: string | null;
   /** Unit → series name, for modules publishing one series per unit. */
   series_by_unit: Record<string, string> | null;
+  /** Null for built-ins; the person who made an activity tracker. */
+  owner_id?: string | null;
+  kind?: 'builtin' | 'activity';
+  /** Activity trackers: the icon's geometry, drawn without the icon library. */
+  icon_nodes?: IconNode | null;
 }
 
 export interface UserModule {
@@ -25,7 +38,7 @@ export interface UserModule {
   active: boolean;
   position: number;
   settings: {
-    source_order?: FoodSource[];
+    source_order?: LookupSource[];
     daily_target?: number;
     /** Writing: which unit leads on the calendar. */
     measure?: WritingMeasure;
@@ -33,13 +46,26 @@ export interface UserModule {
   };
 }
 
-export interface MealItem {
+export interface Macros {
+  protein_g: number | null;
+  /** Total carbohydrate, fibre included, as labels and USDA report it. */
+  carbs_g: number | null;
+  fat_g: number | null;
+  fiber_g: number | null;
+}
+
+export interface MealItem extends Partial<Macros> {
   id?: string;
   name: string;
   portion: string | null;
   kcal: number | null;
   match_source: FoodSource;
+  /** USDA fdcId, Open Food Facts barcode, or the OpenAI model that estimated it. */
   match_ref: string | null;
+  /** What the item was priced against, e.g. "Yogurt, Greek, plain, nonfat". */
+  matched_name?: string | null;
+  /** How kcal was reached, e.g. "80 g × 380 kcal/100 g". Null when set by hand. */
+  basis?: string | null;
 }
 
 export interface Entry {
@@ -181,6 +207,35 @@ export interface Connection {
   i_requested: boolean;
   i_share: ModuleSlug[];
   they_share: ModuleSlug[];
+  /** Module → "full" | "presence", for what I grant. */
+  i_share_detail?: Record<string, ShareDetail>;
+  /** Module → level, for what they grant me. */
+  they_share_detail?: Record<string, ShareDetail>;
+  /** Modules they share that I have chosen not to see. */
+  i_mute?: ModuleSlug[];
+}
+
+/** "full": values, labels, notes. "presence": only that a day was logged. */
+export type ShareDetail = 'full' | 'presence';
+export type ShareLevel = 'none' | ShareDetail;
+
+/** One day of one module someone shares with me. */
+export interface SharedDayTotal {
+  owner_id: string;
+  local_date: string;
+  module_slug: ModuleSlug;
+  detail: ShareDetail;
+  entry_count: number;
+  /** Null on a presence-only grant. */
+  value: number | null;
+  unit: string | null;
+  measures: Record<string, number> | null;
+}
+
+export interface DayClosure {
+  module_slug: ModuleSlug;
+  local_date: string;
+  closed_at: string;
 }
 
 export interface Profile {
@@ -190,4 +245,6 @@ export interface Profile {
   time_zone: string;
   weight_unit: 'lb' | 'kg';
   distance_unit: 'mi' | 'km';
+  /** The highlight colour, #RRGGBB. */
+  accent_color?: string;
 }

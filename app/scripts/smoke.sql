@@ -288,6 +288,152 @@ begin
 end
 $$;
 
+
+-- ── feedback round ──────────────────────────────────────────────────────────
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+
+-- Macros and provenance travel with an item, and editing a meal re-sums it.
+select public.log_meal(
+  'Toast and eggs',
+  '[{"name":"Sourdough toast","portion":"2 slices","kcal":220,"match_source":"usda","match_ref":"172687",
+     "matched_name":"Bread, sourdough","basis":"2 × 110 kcal/serving","protein_g":8,"carbs_g":42,"fat_g":1.5,"fiber_g":2},
+    {"name":"Eggs","portion":"2","kcal":140,"match_source":"openai","match_ref":"gpt-5.6-sol",
+     "matched_name":"Large egg (estimate)","basis":"OpenAI estimate","protein_g":12,"carbs_g":1,"fat_g":10,"fiber_g":0}]'::jsonb,
+  '2026-09-08T07:30:00Z'
+) \gset toast_
+
+do $$
+declare
+  total numeric;
+  prot  numeric;
+  src   text;
+begin
+  select value into total from public.entries where label = 'Toast and eggs';
+  select sum(protein_g), string_agg(match_source::text, ',' order by position)
+    into prot, src from public.meal_items mi join public.entries e on e.id = mi.entry_id
+   where e.label = 'Toast and eggs';
+  if total <> 360 or prot <> 20 or src <> 'usda,openai' then
+    raise exception 'macros/provenance not stored: % kcal, % g protein, %', total, prot, src;
+  end if;
+  if (select items -> 1 ->> 'basis' from public.entry_feed where label = 'Toast and eggs') <> 'OpenAI estimate' then
+    raise exception 'entry_feed does not carry the basis';
+  end if;
+end
+$$;
+
+select public.update_meal(
+  :'toast_log_meal', 'Toast', '[{"name":"Sourdough toast","portion":"1 slice","kcal":110,"protein_g":4}]'::jsonb,
+  '2026-09-08T07:45:00Z', date '2026-09-08', 'just the one');
+
+do $$
+begin
+  if (select value from public.entries where label = 'Toast') <> 110 then
+    raise exception 'update_meal did not re-sum';
+  end if;
+  if (select count(*) from public.meal_items mi join public.entries e on e.id = mi.entry_id where e.label = 'Toast') <> 1 then
+    raise exception 'update_meal did not replace the items';
+  end if;
+end
+$$;
+
+-- Closing a day.
+insert into public.day_closures (user_id, module_slug, local_date) values (auth.uid(), 'calories', '2026-09-08');
+
+-- A tracker of one's own: created active, logged, rolled up, removable.
+select public.create_activity_module('Stretch', 'activity',
+  '[["path",{"d":"M22 12h-4l-3 9L9 3l-3 9H2"}]]'::jsonb) \gset act_
+
+insert into public.entries (user_id, module_slug, occurred_at, local_date, value, unit, label)
+values (auth.uid(), :'act_create_activity_module', '2026-09-08T08:00:00Z', '2026-09-08', 1, 'done', 'Stretch');
+
+do $$
+declare
+  slug text := (select m.slug from public.modules m where m.name = 'Stretch');
+begin
+  if not (select active from public.user_modules where module_slug = slug and user_id = auth.uid()) then
+    raise exception 'new tracker should be active';
+  end if;
+  if (select value from public.daily_module_totals where module_slug = slug and local_date = '2026-09-08') <> 1 then
+    raise exception 'tracker day did not roll up';
+  end if;
+end
+$$;
+
+-- Bo cannot see Ana's tracker, and cannot create one in her name.
+select set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+do $$
+begin
+  if exists (select 1 from public.modules where kind = 'activity') then
+    raise exception 'another account''s tracker is visible';
+  end if;
+end
+$$;
+
+-- Presence-only sharing: Bo learns that Ana logged Calories, never the number.
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+select public.set_module_share_level(:'conn_request_connection', 'calories', 'presence');
+select public.set_module_share_level(:'conn_request_connection', :'act_create_activity_module', 'full');
+
+select set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', true);
+do $$
+declare
+  rows_seen int;
+  leaked    int;
+begin
+  if (select count(*) from public.entries where module_slug = 'calories') <> 0
+     or (select count(*) from public.meal_items) <> 0 then
+    raise exception 'a presence share exposed calorie rows';
+  end if;
+
+  select count(*), count(*) filter (where value is not null)
+    into rows_seen, leaked
+    from public.shared_daily_totals('2026-09-01', '2026-09-30')
+   where module_slug = 'calories';
+  if rows_seen = 0 then
+    raise exception 'presence share shows no logged days';
+  end if;
+  if leaked <> 0 then
+    raise exception 'presence share leaked a calorie total';
+  end if;
+
+  if not exists (select 1 from public.modules where kind = 'activity') then
+    raise exception 'a shared tracker should be readable by name';
+  end if;
+  if (select value from public.shared_daily_totals('2026-09-01', '2026-09-30')
+       where module_slug like 'act-%' limit 1) <> 1 then
+    raise exception 'full tracker share should carry its value';
+  end if;
+end
+$$;
+
+-- Bo mutes Ana's Calories: gone from what he receives, still granted by her.
+select public.set_receive(:'conn_request_connection', 'calories', false);
+do $$
+begin
+  if exists (select 1 from public.shared_daily_totals('2026-09-01', '2026-09-30') where module_slug = 'calories') then
+    raise exception 'muted module still received';
+  end if;
+  if (select they_share_detail ->> 'calories' from public.my_connections) <> 'presence' then
+    raise exception 'my_connections should still report the grant and its level';
+  end if;
+  if not exists (select 1 from public.my_connections where 'calories' = any (i_mute)) then
+    raise exception 'my_connections should report the mute';
+  end if;
+end
+$$;
+
+-- Removing the tracker takes its entries and grants with it.
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+select public.delete_activity_module(:'act_create_activity_module');
+do $$
+begin
+  if exists (select 1 from public.modules where kind = 'activity')
+     or exists (select 1 from public.entries where module_slug like 'act-%') then
+    raise exception 'tracker not fully removed';
+  end if;
+end
+$$;
+
 rollback;
 
-\echo '  smoke: schema, triggers, rollups, drafts and per-module sharing all behave'
+\echo '  smoke: schema, triggers, rollups, drafts, trackers, macros and sharing levels all behave'

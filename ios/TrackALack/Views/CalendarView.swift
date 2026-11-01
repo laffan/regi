@@ -348,13 +348,21 @@ struct MonthDay: View {
         }
         .padding(4)
         .aspectRatio(1, contentMode: .fill)
-        .background(isToday ? Theme.accent : (flagged ? Theme.accent100 : Theme.bg))
-        .foregroundStyle(isToday ? Theme.bg : Theme.ink)
+        // The day fills towards the highlight with the share of all active
+        // modules used, whichever one the calendar is filtered to.
+        .background(Theme.bg.overlay(Theme.accent.opacity(fraction)))
+        .foregroundStyle(Theme.ink)
         .border(Theme.line, width: 0.5)
+        .overlay { if isToday { Rectangle().strokeBorder(Theme.ink, lineWidth: 2) } }
+    }
+
+    private var fraction: Double {
+        let all = store.activeModules
+        guard !all.isEmpty, date <= store.today else { return 0 }
+        return Double(all.filter { store.logged(date, $0.slug) }.count) / Double(all.count)
     }
 
     private func barColour(logged: Bool) -> Color {
-        if isToday { return logged ? Theme.bg : Theme.bg.opacity(0.35) }
-        return logged ? Theme.ink : Theme.ink.opacity(0.13)
+        logged ? Theme.ink : Theme.ink.opacity(0.13)
     }
 }

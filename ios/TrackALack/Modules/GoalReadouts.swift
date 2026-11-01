@@ -104,9 +104,13 @@ enum GoalReadouts {
         return chosen.prefix(slots).map { read($0, store: store) }
     }
 
-    /// The Coming up list and the calendar's Ahead band.
+    /// The Coming up list and the calendar's Ahead band — switched off for now,
+    /// along with milestones. Kept so the feature can return without rework.
+    static let upcomingEnabled = false
+
     @MainActor
     static func upcoming(_ goals: [Goal], store: Store, limit: Int = 4) -> [Upcoming] {
+        guard upcomingEnabled else { return [] }
         var items: [Upcoming] = []
 
         for goal in goals where goal.achievedAt == nil {
@@ -138,6 +142,7 @@ enum GoalReadouts {
 
     /// Dates carrying a goal or milestone, for the calendar.
     static func flagged(_ goals: [Goal]) -> [String: DayFlag] {
+        guard upcomingEnabled else { return [:] }
         var flags: [String: DayFlag] = [:]
         for goal in goals {
             if let achieved = goal.achievedAt {
@@ -152,6 +157,7 @@ enum GoalReadouts {
     /// The milestone the day list pins to today.
     @MainActor
     static func nearestMilestone(_ goals: [Goal], store: Store) -> String? {
+        guard upcomingEnabled else { return nil }
         guard let next = goals
             .filter({ $0.isMilestone && $0.achievedAt == nil })
             .sorted(by: { ($0.dueOn ?? "9999") < ($1.dueOn ?? "9999") })

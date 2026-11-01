@@ -7,7 +7,7 @@
 
 import type { Point } from '@/lib/projection';
 import type { DailyTotal } from '@/lib/types';
-import { MODULES, moduleDef } from '@/modules/registry';
+import { moduleDef } from '@/modules/registry';
 
 export interface SeriesIndex {
   /** The module's headline series, e.g. weight.daily. */
@@ -26,8 +26,7 @@ export function buildSeriesIndex(totals: DailyTotal[] | undefined): SeriesIndex 
   };
 
   for (const row of totals ?? []) {
-    const def = MODULES[row.module_slug];
-    if (!def) continue;
+    const def = moduleDef(row.module_slug);
 
     if (def.seriesByUnit) {
       for (const [unit, series] of Object.entries(def.seriesByUnit)) {
@@ -61,7 +60,13 @@ export function buildSeriesIndex(totals: DailyTotal[] | undefined): SeriesIndex 
 }
 
 /** A day counts as logged if anything was recorded, whatever unit it was in. */
-export function isLogged(total: DailyTotal | undefined): boolean {
+export function isLogged(total: Pick<DailyTotal, 'value' | 'entry_count'> | undefined): boolean {
   if (!total) return false;
   return total.value != null || (total.entry_count ?? 0) > 0;
+}
+
+/** How much of the day's set was used: 1 of 3 active modules logged is a third. */
+export function dayFill(date: string, slugs: string[], logged: (date: string, slug: string) => boolean): number {
+  if (!slugs.length) return 0;
+  return slugs.filter((slug) => logged(date, slug)).length / slugs.length;
 }

@@ -6,11 +6,12 @@
 import { useMemo } from 'react';
 import { CrosstalkChart } from '@/components/CrosstalkChart';
 import { GoalsPanel, ModulesPanel } from '@/components/Panels';
-import { StripLegend, WeekStrip, indexTotals } from '@/components/WeekStrip';
-import { WIDGETS } from '@/components/widgets';
+import { WeekStrip, indexTotals } from '@/components/WeekStrip';
+import { widgetFor } from '@/components/widgets';
 import {
   useBooks,
   useDailyTotals,
+  useDayClosures,
   useEntries,
   useGoals,
   useModules,
@@ -22,9 +23,8 @@ import { buildSeriesIndex } from '@/data/series';
 import { addDays, rangeOfDays, startOfWeek, today as todayISO, weekDays, weekLabel } from '@/lib/dates';
 import { group } from '@/lib/format';
 import { mean, movingMean, type Point } from '@/lib/projection';
-import { readGoal, upcoming } from '@/modules/goals';
+import { readGoal } from '@/modules/goals';
 import { CROSSTALK, moduleDef, publisherOf } from '@/modules/registry';
-import type { Goal, ModuleSlug } from '@/lib/types';
 
 const HISTORY_DAYS = 90;
 
@@ -40,6 +40,7 @@ export function Dashboard() {
   const books = useBooks();
   const savedMeals = useSavedMeals();
   const writingProjects = useWritingProjects();
+  const closures = useDayClosures(today, today);
 
   const totalsIndex = useMemo(() => indexTotals(totals.data), [totals.data]);
   const series = useMemo(() => buildSeriesIndex(totals.data), [totals.data]);
@@ -60,18 +61,11 @@ export function Dashboard() {
 
   const days = weekDays(startOfWeek(today));
   const activeGoals = (goals.data ?? []).filter((g) => active.some((m) => m.slug === g.module_slug));
-  const goalCtx = { seriesFor, seriesByName: series.byName, books: books.data ?? [], today };
-  // Recurring goals first, with the last slot kept for the nearest milestone —
-  // the panel is meant to answer "how is today going, and what is close".
+  const goalCtx = { seriesFor, seriesByName: series.byName, today };
+  // The panel answers "how is today going": the recurring goals of the
+  // modules that are on.
   const slots = compact ? 4 : 3;
-  const recurring = activeGoals.filter((g) => g.kind === 'goal' && !g.due_on);
-  const milestones = activeGoals
-    .filter((g) => g.kind === 'milestone' && !g.achieved_at)
-    .sort((a, b) => (a.due_on ?? '9999').localeCompare(b.due_on ?? '9999'));
-  const readouts = [...recurring.slice(0, slots - Math.min(milestones.length, 1)), ...milestones.slice(0, 1)]
-    .slice(0, slots)
-    .map((g) => readGoal(g, goalCtx));
-  const ahead = upcoming(activeGoals, goalCtx, 3);
+  const readouts = activeGoals.slice(0, slots).map((g) => readGoal(g, goalCtx));
 
   const widgetProps = {
     compact,
@@ -83,6 +77,7 @@ export function Dashboard() {
     books: books.data ?? [],
     savedMeals: savedMeals.data ?? [],
     writingProjects: writingProjects.data ?? [],
+    closures: closures.data ?? [],
   };
 
   // The panel takes whatever the widgets leave, so the grid never ends on a
@@ -94,10 +89,9 @@ export function Dashboard() {
   const goalsPanel = (
     <GoalsPanel
       key="goals"
-      title={count <= 3 ? 'Today' : 'Goals & milestones'}
+      title={count <= 3 ? 'Today' : 'Goals'}
       icon={count <= 3 ? 'target' : null}
       readouts={readouts}
-      ahead={ahead}
       compact={compact}
       span={panelSpan}
     />
@@ -116,12 +110,13 @@ export function Dashboard() {
       </div>
 
       <WeekStrip days={days} today={today} modules={defs} totals={totalsIndex} />
-      <StripLegend modules={defs} />
 
       <div className="wgrid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
         {active.map((m) => {
-          const Widget = WIDGETS[m.slug as ModuleSlug];
-          return <Widget key={m.slug} {...widgetProps} settings={m.settings} series={seriesFor(m.slug)} />;
+          const Widget = widgetFor(m.slug, m.kind);
+          return (
+            <Widget key={m.slug} {...widgetProps} slug={m.slug} settings={m.settings} series={seriesFor(m.slug)} />
+          );
         })}
         {/* At one or two modules the panel has room beside the chart instead. */}
         {count >= 3 ? goalsPanel : null}
@@ -147,35 +142,28 @@ export function Dashboard() {
               chart={chart}
               today={today}
               seriesFor={seriesFor}
-              goals={activeGoals}
               calorieTarget={Number(
                 active.find((m) => m.slug === 'calories')?.settings.daily_target ?? 2200,
               )}
             />
           ))}
           {charts.length === 1 && count === 3 ? <ModulesPanel modules={modules.data ?? []} /> : null}
-          {charts.length === 1 && count < 3 ? goalsPanelAside(readouts, ahead) : null}
+          {charts.length === 1 && count < 3 ? <GoalsPanel title="Goals" readouts={readouts} /> : null}
         </div>
       ) : null}
     </>
   );
 }
 
-function goalsPanelAside(readouts: ReturnType<typeof readGoal>[], ahead: ReturnType<typeof upcoming>) {
-  return <GoalsPanel title="Goals & milestones" readouts={readouts} ahead={ahead} />;
-}
-
 function ChartCell({
   chart,
   today,
   seriesFor,
-  goals,
   calorieTarget,
 }: {
   chart: (typeof CROSSTALK)[number];
   today: string;
   seriesFor: (slug: string) => Point[];
-  goals: Goal[];
   calorieTarget: number;
 }) {
   const barModule = publisherOf(chart.bars);
@@ -188,9 +176,6 @@ function ChartCell({
   // Weight reads as a 7-day mean; a mileage line is drawn as logged.
   const line = lineModule?.slug === 'weight' ? movingMean(rawLine, 7) : rawLine;
 
-  const milestone = goals.find(
-    (g) => g.kind === 'milestone' && g.module_slug === lineModule?.slug && g.target !== null,
-  );
   const barMean = mean(bars);
 
   return (
@@ -216,7 +201,6 @@ function ChartCell({
         line={line}
         lineLabel={lineModule?.slug === 'weight' ? `${chart.line}, 7-day mean` : chart.line}
         lineDashed={chart.lineDashed}
-        goal={milestone ? { target: Number(milestone.target), label: milestone.title } : null}
         footnote={
           chart.footnote ?? (barMean !== null ? `Mean ${group(barMean)} kcal` : undefined)
         }

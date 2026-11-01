@@ -61,7 +61,7 @@ struct SignInView: View {
                     message = nil
                 }
                 .font(Theme.font(14, .heavy))
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Theme.accent700)
             }
             .padding(20)
 
