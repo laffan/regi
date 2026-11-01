@@ -35,6 +35,19 @@ export function ActivityWidget({ slug, compact, today, totals }: WidgetProps) {
         <span className="wg-meta">{count} of 14 days</span>
       </div>
 
+      <button
+        type="button"
+        role="switch"
+        aria-checked={done}
+        aria-label={`${def.name} today`}
+        className="switch"
+        disabled={toggle.isPending}
+        onClick={() => toggle.mutate({ slug, name: def.name, date: today, done: !done })}
+      >
+        <span className="yes">I did!</span>
+        <span className="no">Not today</span>
+      </button>
+
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <div className="big" style={compact ? { fontSize: 36 } : undefined}>
           {streak}
@@ -59,18 +72,6 @@ export function ActivityWidget({ slug, compact, today, totals }: WidgetProps) {
         ))}
       </div>
 
-      <button
-        type="button"
-        role="switch"
-        aria-checked={done}
-        aria-label={`${def.name} today`}
-        className="switch push"
-        disabled={toggle.isPending}
-        onClick={() => toggle.mutate({ slug, name: def.name, date: today, done: !done })}
-      >
-        <span className="yes">I did!</span>
-        <span className="no">Not today</span>
-      </button>
       {toggle.isError ? <div className="error">{(toggle.error as Error).message}</div> : null}
     </div>
   );

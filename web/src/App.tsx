@@ -1,8 +1,10 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from '@/data/auth';
 import { useProfile } from '@/data/hooks';
 import { applyAccent } from '@/lib/theme';
+import { setTimeZone } from '@/data/api';
 import { Nav } from '@/components/Nav';
 import { Dashboard } from '@/pages/Dashboard';
 import { LogPage } from '@/pages/Log';
@@ -35,6 +37,26 @@ function SignedIn() {
   useEffect(() => {
     if (accent) applyAccent(accent);
   }, [accent]);
+
+  // The calendar day is worked out on the server in the profile's zone, so it
+  // has to be this device's zone — otherwise an evening meal in California
+  // lands on tomorrow and "today" never sees it.
+  const qc = useQueryClient();
+  const synced = useRef(false);
+  const zone = profile.data?.time_zone;
+  useEffect(() => {
+    if (!zone || synced.current) return;
+    synced.current = true;
+    const device = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!device || device === zone) return;
+    setTimeZone(device)
+      .then((changed) => {
+        if (changed) void qc.invalidateQueries();
+      })
+      .catch(() => {
+        // An unknown zone name, or an older backend: keep the stored one.
+      });
+  }, [zone, qc]);
 
   return (
     <div className="app">

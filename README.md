@@ -61,7 +61,7 @@ data, standing at the numbers the designs show on 2026-09-07.
 
 | Module | Records | Publishes |
 | --- | --- | --- |
-| Weight | A weigh-in, typed into one large field | `weight.daily` |
+| Weight | A weigh-in, typed into the widget's input line | `weight.daily` |
 | Calories | Food with protein, carbs, fibre and fat, priced against USDA FoodData Central, Open Food Facts and (labelled as estimates) OpenAI | `calories.daily`, `calories.meals` |
 | Reading | Pages against a book you add, with an optional note | `reading.pages`, `reading.books` |
 | Running | Distance and time | `running.miles`, `running.pace` |
@@ -78,6 +78,11 @@ Modules → Track Activity): a name, an icon from the Lucide set, and a daily
 "I did!" / "Not today" switch. They live in `modules` with an owner, publish
 `activity.<slug>`, and appear everywhere a built-in does. The icon's geometry
 is stored with the tracker, so a client can draw it without the icon library.
+
+On the dashboard every module leads with the same control — an input line with
+its "Log …" button attached — and its numbers sit beneath. A food line sent from
+the Calories widget goes straight to the Log, where it shows as a placeholder
+draft until its items have been looked up.
 
 Each day in the week strip and the months grid fills towards the highlight
 colour by the share of active modules used that day; the colour is a per-account
@@ -122,7 +127,8 @@ not configured.
   It has been kept working against the current schema (trackers, the new food
   source, recurring goals only, the cornflower highlight and the day fill), but
   editing entries, voice logging, macros, the per-account colour, tracker
-  icons, Track Activity and the sharing levels are web-only so far.
+  icons, Track Activity, the sharing levels and the input-first widgets are
+  web-only so far.
 - The edge functions typecheck against a Deno shim but have not been executed:
   that needs a Docker daemon for `supabase start`, and no OpenAI, USDA or Open
   Food Facts call has been made from this environment.

@@ -336,6 +336,52 @@ begin
 end
 $$;
 
+-- A draft's macros survive approval.
+with d as (
+  insert into public.log_drafts (user_id, raw_text) values (auth.uid(), 'two eggs') returning id
+)
+insert into public.log_draft_rows (draft_id, user_id, module_slug, label, value, unit, occurred_at, payload)
+select d.id, auth.uid(), 'calories', 'Eggs', 140, 'kcal', '2026-09-08T08:30:00Z'::timestamptz,
+       '{"items":[{"name":"Eggs","portion":"2","kcal":140,"match_source":"openai","match_ref":"m",
+                   "basis":"OpenAI estimate","protein_g":12,"carbs_g":1,"fat_g":10,"fiber_g":0}]}'::jsonb
+  from d;
+select public.approve_draft((select id from public.log_drafts where raw_text = 'two eggs'));
+do $$
+begin
+  if (select (items -> 0 ->> 'protein_g')::numeric from public.entry_feed where label = 'Eggs') <> 12 then
+    raise exception 'approve_draft dropped the macros';
+  end if;
+end
+$$;
+
+-- Time zone: a never-set account takes the device's zone and re-dates history.
+select public.set_time_zone('America/Los_Angeles');
+do $$
+begin
+  if (select time_zone from public.profiles where id = auth.uid()) <> 'America/Los_Angeles' then
+    raise exception 'set_time_zone did not store the zone';
+  end if;
+  -- Toast is at 07:45Z, which is 00:45 PDT: still the 8th.
+  if (select local_date from public.entries where label = 'Toast') <> date '2026-09-08' then
+    raise exception 'Toast (07:45Z = 00:45 PDT) should stay on the 8th';
+  end if;
+  if (select local_date from public.entries where label = 'Eggs') <> date '2026-09-08' then
+    raise exception 'Eggs (08:30Z = 01:30 PDT) should stay on the 8th';
+  end if;
+  if (select local_date from public.entries where module_slug = 'weight' limit 1) <> date '2026-09-06' then
+    raise exception 'a 06:40Z weigh-in should re-date to the 6th in Los Angeles';
+  end if;
+end
+$$;
+select public.set_time_zone('Europe/Paris');
+do $$
+begin
+  if (select local_date from public.entries where module_slug = 'weight' limit 1) <> date '2026-09-06' then
+    raise exception 'a second zone change must not re-date history';
+  end if;
+end
+$$;
+
 -- Closing a day.
 insert into public.day_closures (user_id, module_slug, local_date) values (auth.uid(), 'calories', '2026-09-08');
 

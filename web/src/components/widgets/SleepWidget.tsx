@@ -1,8 +1,6 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from '@/components/Icon';
-import { LogButton } from './LogButton';
-import { ValueDialog } from '@/components/ValueDialog';
+import { QuickInput } from './QuickInput';
 import { useLogSleep } from '@/data/hooks';
 import { totalKey } from '@/components/WeekStrip';
 import { startOfWeek, weekDays } from '@/lib/dates';
@@ -10,7 +8,6 @@ import type { WidgetProps } from './types';
 
 export function SleepWidget({ compact, today, totals, goals }: WidgetProps) {
   const log = useLogSleep();
-  const [logging, setLogging] = useState(false);
 
   const hours = totals.get(totalKey(today, 'sleep'))?.value ?? 0;
   const goal = Number(goals.find((g) => g.module_slug === 'sleep' && g.cadence === 'daily')?.target ?? 8);
@@ -25,6 +22,19 @@ export function SleepWidget({ compact, today, totals, goals }: WidgetProps) {
         </Link>
         <span className="wg-meta">hours</span>
       </div>
+
+      <QuickInput
+        label="Log sleep"
+        ariaLabel="Hours slept"
+        placeholder="hours slept, e.g. 7.5"
+        busy={log.isPending}
+        error={log.isError ? (log.error as Error).message : null}
+        onSubmit={(text) => {
+          const h = Number(text.replace(',', '.').replace(/[^\d.]/g, ''));
+          if (!Number.isFinite(h) || h <= 0 || h > 24) return 'Type the hours slept, e.g. 7.5.';
+          log.mutate(h);
+        }}
+      />
 
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <div className="big" style={compact ? { fontSize: 36 } : undefined}>
@@ -50,22 +60,6 @@ export function SleepWidget({ compact, today, totals, goals }: WidgetProps) {
         })}
       </div>
 
-      <LogButton label="Log sleep" compact={compact} onClick={() => setLogging(true)} />
-
-      {logging ? (
-        <ValueDialog
-          title="Log sleep"
-          submitLabel="Log"
-          busy={log.isPending}
-          fields={[{ name: 'hours', label: 'Hours slept', placeholder: '7.5' }]}
-          onClose={() => setLogging(false)}
-          onSubmit={({ hours: value }) => {
-            const h = Number(value);
-            if (!Number.isFinite(h) || h <= 0) return;
-            log.mutate(h, { onSuccess: () => setLogging(false) });
-          }}
-        />
-      ) : null}
     </div>
   );
 }

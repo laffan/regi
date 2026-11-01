@@ -101,12 +101,16 @@ function tableFor(url, activeSlugs) {
   }
 }
 
-async function shoot(page, name, path, click, wait = 900) {
+async function shoot(page, name, path, click, wait = 900, run) {
   await page.goto(`http://localhost:${PORT}${path}`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(wait);
   for (const target of [].concat(click ?? [])) {
     await page.getByText(target, { exact: true }).first().click();
     await page.waitForTimeout(500);
+  }
+  if (run) {
+    await run(page);
+    await page.waitForTimeout(600);
   }
   await page.screenshot({ path: join(outDir, `${name}.png`), fullPage: true });
 }
@@ -140,6 +144,26 @@ const scenarios = [
   { name: 'fb-calendar-shared', path: '/calendar', active: ['weight', 'calories', 'reading', 'act-water'] },
   { name: 'fb-calendar-months', path: '/calendar', active: ['weight', 'calories', 'reading', 'act-water'], click: 'Months' },
   { name: 'fb-module-tracker', path: '/module/act-water', active: ['weight', 'calories', 'reading', 'act-water'] },
+  // Second round: a food line sent from the dashboard lands on the Log as a
+  // placeholder draft while the (deliberately slow) parse runs.
+  {
+    name: 'fb2-log-placeholder',
+    path: '/',
+    active: ['weight', 'calories', 'reading', 'running', 'sleep'],
+    run: async (page) => {
+      await page.getByLabel('What did you eat?').fill('two eggs and a slice of toast');
+      await page.getByRole('button', { name: 'Log food' }).click();
+      await page.waitForURL('**/log');
+    },
+  },
+  {
+    name: 'fb2-log-filter',
+    path: '/log',
+    active: ['weight', 'calories', 'reading'],
+    run: async (page) => {
+      await page.getByLabel('Filter the log by module').selectOption('calories');
+    },
+  },
 ];
 
 const consoleErrors = [];
@@ -190,6 +214,12 @@ await context.route(`**://${SUPABASE_HOST}/**`, async (route) => {
     });
   }
 
+  // parse-log answers slowly, so the placeholder draft can be seen.
+  if (url.pathname.startsWith('/functions/v1/parse-log')) {
+    await new Promise((r) => setTimeout(r, 8000));
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ draft: null, rows: [] }) });
+  }
+
   if (url.pathname.startsWith('/rest/v1/rpc/')) {
     const fn = url.pathname.split('/rpc/')[1];
     const body = fn === 'shared_daily_totals' ? fx.sharedTotals() : [];
@@ -216,7 +246,7 @@ page.on('pageerror', (err) => consoleErrors.push(`pageerror: ${err.message}`));
 
 for (const scenario of scenarios) {
   activeSlugs = scenario.active;
-  await shoot(page, scenario.name, scenario.path, scenario.click);
+  await shoot(page, scenario.name, scenario.path, scenario.click, 900, scenario.run);
   console.log(`✓ ${scenario.name}`);
 }
 

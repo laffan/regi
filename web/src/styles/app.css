@@ -143,39 +143,6 @@ a.kick:hover { color: var(--color-accent-800); }
 .delta { font-size: 12px; color: var(--color-accent-700); font-weight: 800; }
 .push { margin-top: auto; }
 
-/* — weight field — a typed value, set large — */
-.wfield {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 10px 8px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-divider);
-  border-bottom: 2px solid var(--ink);
-  cursor: text;
-}
-.wfield:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); border-bottom-color: var(--ink); }
-.wfield:focus-within { border-color: var(--color-accent); border-bottom-color: var(--color-accent); }
-.wfield input {
-  flex: 1;
-  min-width: 0;
-  width: 100%;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: inherit;
-  caret-color: var(--color-accent);
-  font: 800 44px/1 var(--font-heading);
-  letter-spacing: -0.02em;
-  -moz-appearance: textfield;
-}
-.wfield input::-webkit-outer-spin-button,
-.wfield input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.wfield input::placeholder { color: color-mix(in srgb, var(--ink) 28%, transparent); }
-.wfield input:focus-visible { outline: none; }
-.wfield .unit { font-size: 13px; opacity: 0.6; }
-.wg-compact .wfield input { font-size: 34px; }
-
 /* — meal bar — */
 .mealbar { display: flex; gap: 2px; height: 12px; }
 .mealbar > span { background: var(--ink); }
@@ -406,3 +373,24 @@ a.src:hover { text-decoration: underline; }
   .settings { grid-template-columns: minmax(0, 1fr); }
   .settings-nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
 }
+
+/* — the dashboard's input line: field and "Log …" button as one control — */
+.qinput-wrap { display: flex; flex-direction: column; gap: 8px; }
+.qinput { display: flex; min-width: 0; }
+.qinput .input { flex: 1; min-width: 0; min-height: 40px; border-right: 0; }
+.qinput .btn { flex: none; min-height: 40px; padding-inline: 14px; white-space: nowrap; }
+.qinput .btn:disabled { opacity: 0.55; }
+.wg-compact .qinput .input, .wg-compact .qinput .btn { min-height: 36px; font-size: 13px; }
+.qcheck { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; cursor: pointer; }
+.qnote { font-size: 11.5px; opacity: 0.6; }
+
+/* — a draft still being looked up — */
+.draft-pending { opacity: 0.85; }
+.skeleton {
+  height: 30px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--ink) 6%, transparent) 0%, color-mix(in srgb, var(--ink) 12%, transparent) 50%, color-mix(in srgb, var(--ink) 6%, transparent) 100%);
+  background-size: 200% 100%;
+  animation: skeleton 1.2s ease-in-out infinite;
+}
+@keyframes skeleton { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }

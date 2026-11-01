@@ -24,7 +24,7 @@ src/
                          activity trackers are registered from the catalog
   modules/goals.ts       recurring goal readouts (milestones are off for now)
   data/series.ts         day rollups → the series widgets and goals read
-  components/widgets/    one widget per module, all ending in the same Log control
+  components/widgets/    one widget per module, each led by the same input line + Log button
   pages/                 Dashboard, Log, Calendar, ModuleDetail, Settings, SignIn
 ```
 

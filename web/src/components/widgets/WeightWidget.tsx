@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from '@/components/Icon';
-import { LogButton } from './LogButton';
+import { QuickInput } from './QuickInput';
 import { useLogWeight } from '@/data/hooks';
 import { totalKey } from '@/components/WeekStrip';
 import { movingMean, weeklyRate } from '@/lib/projection';
@@ -9,32 +9,15 @@ import { signed, weight as fmtWeight } from '@/lib/format';
 import { timeOfDay } from '@/lib/dates';
 import type { WidgetProps } from './types';
 
-/** Weight, typed into one large field. The last reading sits in it as a hint. */
+/** Weight: type the reading, then the last one and the trend beneath. */
 export function WeightWidget({ compact, today, totals, entries, series, profile }: WidgetProps) {
   const log = useLogWeight();
-  const [text, setText] = useState('');
-  const [error, setError] = useState<string | null>(null);
 
   const todayTotal = totals.get(totalKey(today, 'weight'));
   const last = todayTotal?.value ?? series.at(-1)?.value ?? null;
   const rate = useMemo(() => weeklyRate(movingMean(series, 7).slice(-21)), [series]);
   const loggedAt = entries.find((e) => e.module_slug === 'weight')?.occurred_at;
   const unit = profile.weight_unit;
-
-  const submit = () => {
-    const value = Number(text.replace(',', '.'));
-    const [lo, hi] = unit === 'kg' ? [20, 350] : [40, 800];
-    if (!text.trim() || !Number.isFinite(value)) {
-      setError('Type a weight first.');
-      return;
-    }
-    if (value < lo || value > hi) {
-      setError(`That reads as ${value} ${unit} — check the number.`);
-      return;
-    }
-    setError(null);
-    log.mutate({ value: Math.round(value * 10) / 10, unit }, { onSuccess: () => setText('') });
-  };
 
   return (
     <div className={compact ? 'wg wg-compact' : 'wg'}>
@@ -46,40 +29,33 @@ export function WeightWidget({ compact, today, totals, entries, series, profile 
         <span className="wg-meta">{loggedAt ? `logged ${timeOfDay(loggedAt)}` : 'not logged today'}</span>
       </div>
 
-      <label className="wfield" htmlFor="weight-input">
-        <input
-          id="weight-input"
-          type="number"
-          inputMode="decimal"
-          step="0.1"
-          aria-label={`Weight in ${unit}`}
-          placeholder={last !== null ? fmtWeight(last) : '0.0'}
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setError(null);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') submit();
-          }}
-        />
-        <span className="unit">{unit}</span>
-      </label>
+      <QuickInput
+        label="Log weight"
+        ariaLabel={`Weight in ${unit}`}
+        placeholder={last !== null ? `${fmtWeight(last)} ${unit}` : `weight in ${unit}`}
+        busy={log.isPending}
+        error={log.isError ? (log.error as Error).message : null}
+        onSubmit={(text) => {
+          const value = Number(text.replace(',', '.').replace(/[^\d.]/g, ''));
+          const [lo, hi] = unit === 'kg' ? [20, 350] : [40, 800];
+          if (!Number.isFinite(value) || value === 0) return 'Type a weight, e.g. 182.4.';
+          if (value < lo || value > hi) return `That reads as ${value} ${unit} — check the number.`;
+          log.mutate({ value: Math.round(value * 10) / 10, unit });
+        }}
+      />
 
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 11.5 }}>
-        <span style={{ opacity: 0.6 }}>
-          {last !== null ? `Last ${fmtWeight(last)} ${unit}` : 'No readings yet'}
-        </span>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <div className="big" style={compact ? { fontSize: 36 } : undefined}>
+          {last !== null ? fmtWeight(last) : '—'}
+        </div>
+        <span style={{ fontSize: 12, opacity: 0.6 }}>{unit}</span>
         {rate !== null ? (
           <span className="delta" style={{ marginLeft: 'auto' }}>
             {signed(rate)} / wk
           </span>
         ) : null}
       </div>
-
-      {error ? <div className="error">{error}</div> : null}
-
-      <LogButton label="Log weight" compact={compact} busy={log.isPending} onClick={submit} />
+      <div className="qnote">{todayTotal ? 'today' : last !== null ? 'last reading' : 'no readings yet'}</div>
     </div>
   );
 }

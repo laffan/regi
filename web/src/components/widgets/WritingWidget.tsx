@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from '@/components/Icon';
-import { LogButton } from './LogButton';
-import { LogSessionDialog } from './LogSessionDialog';
+import { QuickInput } from './QuickInput';
 import { useLogWritingSession } from '@/data/hooks';
 import { totalKey } from '@/components/WeekStrip';
 import { isLogged } from '@/data/series';
@@ -17,7 +16,7 @@ import type { WidgetProps } from './types';
  */
 export function WritingWidget({ compact, today, totals, goals, settings, writingProjects }: WidgetProps) {
   const log = useLogWritingSession();
-  const [logging, setLogging] = useState(false);
+  const [projectId, setProjectId] = useState<string | null>(null);
 
   const measure = settings.measure ?? 'words';
   const day = totals.get(totalKey(today, 'writing'));
@@ -26,6 +25,7 @@ export function WritingWidget({ compact, today, totals, goals, settings, writing
 
   const active = writingProjects.filter((p) => p.status === 'active');
   const lead = active[0] ?? null;
+  const target_ = active.find((p) => p.id === projectId) ?? lead;
   const goal = goals.find(
     (g) => g.module_slug === 'writing' && g.cadence === 'daily' && g.series === `writing.${measure === 'min' ? 'minutes' : 'words'}`,
   );
@@ -47,6 +47,47 @@ export function WritingWidget({ compact, today, totals, goals, settings, writing
           {active.length} project{active.length === 1 ? '' : 's'}
         </span>
       </div>
+
+      <QuickInput
+        label="Log session"
+        inputMode="text"
+        ariaLabel="Words written or minutes spent"
+        placeholder={(target_?.measure ?? measure) === 'min' ? '25 min (or 640 words)' : '640 words (or 25 min)'}
+        busy={log.isPending}
+        error={log.isError ? (log.error as Error).message : null}
+        onSubmit={(text) => {
+          const amount = Number(text.replace(/,/g, '').match(/\d+(?:\.\d+)?/)?.[0]);
+          if (!Number.isFinite(amount) || amount <= 0) return 'Type an amount, e.g. 640 words or 25 min.';
+          // The unit named wins; otherwise the project's own measure.
+          const unit = /\bmin|minute|\bm\b|\bh\b|hour/i.test(text)
+            ? 'min'
+            : /\bw|word/i.test(text)
+              ? 'words'
+              : (target_?.measure ?? measure);
+          const value = /\bh\b|hour/i.test(text) ? amount * 60 : amount;
+          log.mutate({ project: target_ ?? null, amount: Math.round(value), measure: unit });
+        }}
+      >
+        {active.length > 1 ? (
+          <label className="qnote" style={{ display: 'flex', gap: 6, alignItems: 'center', opacity: 0.8 }}>
+            to
+            <select
+              className="input"
+              style={{ minHeight: 28, padding: '2px 6px', fontSize: 12, width: 'auto' }}
+              value={target_?.id ?? ''}
+              onChange={(e) => setProjectId(e.target.value)}
+            >
+              {active.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : target_ ? (
+          <div className="qnote">to {target_.title}</div>
+        ) : null}
+      </QuickInput>
 
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <div className="big" style={compact ? { fontSize: 36 } : undefined}>
@@ -112,23 +153,6 @@ export function WritingWidget({ compact, today, totals, goals, settings, writing
         </div>
       ) : null}
 
-      <LogButton label="Log session" compact={compact} onClick={() => setLogging(true)} />
-
-      {logging ? (
-        <LogSessionDialog
-          projects={writingProjects}
-          initialProjectId={lead?.id}
-          busy={log.isPending}
-          onClose={() => setLogging(false)}
-          onSubmit={({ projectId, amount, measure: unit, note }) => {
-            const project = writingProjects.find((p) => p.id === projectId) ?? null;
-            log.mutate(
-              { project, amount, measure: unit, note },
-              { onSuccess: () => setLogging(false) },
-            );
-          }}
-        />
-      ) : null}
     </div>
   );
 }

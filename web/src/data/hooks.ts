@@ -2,7 +2,7 @@
 // of keys, because a single log can move the week strip, the calendar and any
 // widget subscribed to the series it publishes.
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
 import type { Book, MealItem, ModuleSlug, Profile, ShareLevel, WritingMeasure, WritingProject } from '@/lib/types';
 
@@ -57,7 +57,7 @@ export const useGoals = () => useQuery({ queryKey: keys.goals, queryFn: api.getG
 export const useWritingProjects = () =>
   useQuery({ queryKey: keys.writingProjects, queryFn: api.getWritingProjects });
 
-export const usePendingDraft = () => useQuery({ queryKey: keys.draft, queryFn: api.getPendingDraft });
+export const usePendingDrafts = () => useQuery({ queryKey: keys.draft, queryFn: api.getPendingDrafts });
 
 export const useConnections = () => useQuery({ queryKey: keys.connections, queryFn: api.getConnections });
 
@@ -221,12 +221,39 @@ export function useDeleteEntry() {
   return useMutation({ mutationFn: (id: string) => api.deleteEntry(id), onSuccess: done });
 }
 
+const PARSE_KEY = ['parse-log'] as const;
+
+/**
+ * Sending a line for parsing. It is fire-and-forget from the caller's side —
+ * a widget sends and moves straight to the Log — so the result is picked up
+ * from the draft query when it lands, not from this hook's callbacks.
+ */
 export function useParseLog() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: PARSE_KEY,
     mutationFn: (text: string) => api.parseLog(text),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.draft }),
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.draft }),
   });
+}
+
+/** Lines sent and still being read and priced — the review column's placeholders. */
+export function useParsing(): { pending: string[]; failed: { text: string; error: string }[] } {
+  const pending = useMutationState({
+    filters: { mutationKey: PARSE_KEY, status: 'pending' },
+    select: (m) => String(m.state.variables ?? ''),
+  });
+  const failed = useMutationState({
+    filters: { mutationKey: PARSE_KEY, status: 'error' },
+    select: (m) => ({
+      text: String(m.state.variables ?? ''),
+      error: (m.state.error as Error | null)?.message ?? 'could not read that line',
+      at: m.state.submittedAt,
+    }),
+  });
+  // Only the most recent failures are worth showing.
+  const recent = failed.filter((f) => Date.now() - f.at < 5 * 60_000).slice(-2);
+  return { pending, failed: recent.map(({ text, error }) => ({ text, error })) };
 }
 
 export function useApproveDraft() {

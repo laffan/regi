@@ -24,7 +24,8 @@ export function moduleValue(slug: string, value: number | null, unit: string | n
     case 'running':
       return `${value.toFixed(1)} ${unit ?? 'mi'}`;
     case 'writing':
-      return `${group(value)} words`;
+      // A session is in words or minutes; say which.
+      return unit === 'min' ? `${group(value)} min` : `${group(value)} words`;
     case 'sleep':
       return `${value.toFixed(1)} h`;
     default:

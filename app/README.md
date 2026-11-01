@@ -10,7 +10,8 @@ supabase/
   seed.sql               the demo account the designs were drawn against
   functions/
     parse-log/           text in → typed draft rows (GPT-5.6 Sol, with a fallback)
-    food-lookup/         one food priced by every enabled source, with provenance
+    food-lookup/         one food priced by every enabled source, with provenance;
+                         or a phrase split into priced items (the meal editor's Add Item)
     transcribe/          voice logging: speech in, text out (nothing is saved)
     _shared/             the client, the parsers, the food matching, OpenAI
 scripts/
@@ -91,7 +92,12 @@ Functions that must happen atomically are SQL, not edge functions:
 `approve_draft`, `log_meal`, `update_meal`, `log_saved_meal`,
 `save_meal_from_entry`, `request_connection`, `respond_to_connection`,
 `set_module_share_level` (and the older `set_module_share`), `set_receive`,
-and the tracker functions. `insert_meal_items` is the one place item columns
+`set_time_zone`, and the tracker functions.
+
+**Time zones.** `local_date` is worked out in `profiles.time_zone`. Accounts
+start on `UTC`; the web client reports the device's zone on sign-in through
+`set_time_zone`, which re-dates existing entries only when the account was
+still on that untouched default. `insert_meal_items` is the one place item columns
 are written, so logging, approving and editing cannot drift apart.
 
 ## Row level security

@@ -1,6 +1,11 @@
 // POST /functions/v1/food-lookup
 //   { query: "greek yogurt", portion: "170 g" }   → best item, priced, plus alternates
 //   { barcode: "0084114...", portion?: "28 g" }   → Open Food Facts, always
+//   { text: "two eggs and a slice of toast" }      → items, split and priced
+//
+// The text form is what the meal editor's "Add Item" line sends: the same
+// reading the Log input gets, limited to food, so a phrase becomes priced
+// lines to append to a meal rather than a new draft.
 //
 // Backs the "No match — set by hand" row in review, the edit dialog's
 // "Look up" button, and the Calories module. Every answer is a priced item
@@ -14,8 +19,10 @@ import {
   lookupBarcode,
   priceFor,
   sourceOrder,
+  priceItems,
   type PricedItem,
 } from '../_shared/food.ts';
+import { fallbackParse, parseWithOpenAI, type ParseContext, type ParsedRow } from '../_shared/parse.ts';
 
 Deno.serve(async (req) => {
   const pre = preflight(req);
@@ -27,19 +34,54 @@ Deno.serve(async (req) => {
 
   let query = '';
   let barcode = '';
+  let text = '';
   let portion: string | null = null;
   try {
     const body = await req.json();
     query = String(body.query ?? '').trim();
     barcode = String(body.barcode ?? '').trim();
+    text = String(body.text ?? '').trim();
     portion = body.portion ? String(body.portion) : null;
   } catch {
     return json({ error: 'expected a JSON body' }, 400);
   }
 
-  if (!query && !barcode) return json({ error: 'give a query or a barcode' }, 400);
+  if (!query && !barcode && !text) return json({ error: 'give a query, a barcode or some text' }, 400);
 
   const cache = serviceClient();
+
+  if (text) {
+    const { data: mod } = await supabase
+      .from('user_modules')
+      .select('settings')
+      .eq('module_slug', 'calories')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    const ctx: ParseContext = {
+      activeModules: ['calories'],
+      weightUnit: 'lb',
+      distanceUnit: 'mi',
+      currentBook: null,
+      savedMeals: [],
+      activities: [],
+      now: new Date().toISOString(),
+    };
+
+    let rows: ParsedRow[] = [];
+    try {
+      rows = await parseWithOpenAI(text, ctx);
+    } catch {
+      rows = [];
+    }
+    if (!rows.length) rows = fallbackParse(text, ctx);
+
+    const wanted = rows.filter((r) => r.module === 'calories').flatMap((r) => r.items);
+    if (!wanted.length) return json({ items: [], note: 'no food recognised' });
+
+    const items = await priceItems(cache, wanted, sourceOrder(mod?.settings?.source_order));
+    return json({ items, note: `${items.length} item${items.length === 1 ? '' : 's'}` });
+  }
 
   if (barcode) {
     const match = await lookupBarcode(barcode);

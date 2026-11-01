@@ -370,25 +370,37 @@ export interface ParseResult {
 export const parseLog = (text: string) =>
   callFunction<ParseResult>('parse-log', { text, now: new Date().toISOString() });
 
-export async function getPendingDraft(): Promise<{ draft: Draft; rows: DraftRow[] } | null> {
+export interface PendingDraft {
+  draft: Draft;
+  rows: DraftRow[];
+}
+
+/**
+ * Every draft still waiting for review, oldest first. Lines can be sent faster
+ * than they are reviewed — from the Log and from a widget — so the review
+ * column holds all of them, not just the latest.
+ */
+export async function getPendingDrafts(): Promise<PendingDraft[]> {
   const { data: drafts, error } = await supabase
     .from('log_drafts')
     .select('*')
+    .eq('user_id', await myId())
     .eq('status', 'pending')
-    .order('created_at', { ascending: false })
-    .limit(1);
+    .order('created_at', { ascending: true });
   if (error) throw error;
-  if (!drafts?.length) return null;
+  if (!drafts?.length) return [];
 
-  const draft = drafts[0] as Draft;
   const { data: rows, error: rowError } = await supabase
     .from('log_draft_rows')
     .select('*')
-    .eq('draft_id', draft.id)
+    .in('draft_id', drafts.map((d) => d.id))
     .order('position');
   if (rowError) throw rowError;
 
-  return { draft, rows: (rows ?? []) as DraftRow[] };
+  return (drafts as Draft[]).map((draft) => ({
+    draft,
+    rows: ((rows ?? []) as DraftRow[]).filter((r) => r.draft_id === draft.id),
+  }));
 }
 
 export async function updateDraftRow(id: string, patch: Partial<DraftRow>): Promise<void> {
@@ -421,6 +433,20 @@ export interface FoodLookup {
 
 export const lookupFood = (query: string, portion?: string | null) =>
   callFunction<FoodLookup>('food-lookup', { query, portion });
+
+/** A phrase — "two eggs and toast" — split into food and priced, for appending to a meal. */
+export const lookupFoodText = (text: string) =>
+  callFunction<{ items: MealItem[]; note: string }>('food-lookup', { text });
+
+/**
+ * The device's time zone, so a calendar day means the same thing here as on
+ * the server. Returns true when the profile changed.
+ */
+export async function setTimeZone(tz: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('set_time_zone', { p_tz: tz });
+  if (error) throw error;
+  return Boolean(data);
+}
 
 /** Voice logging: speech in, text out. The text goes to the input line for review. */
 export async function transcribe(audio: Blob): Promise<string> {

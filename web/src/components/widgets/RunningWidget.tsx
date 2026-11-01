@@ -1,8 +1,6 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from '@/components/Icon';
-import { LogButton } from './LogButton';
-import { ValueDialog } from '@/components/ValueDialog';
+import { QuickInput } from './QuickInput';
 import { useLogRun } from '@/data/hooks';
 import { totalKey } from '@/components/WeekStrip';
 import { duration, pace } from '@/lib/format';
@@ -11,7 +9,6 @@ import type { WidgetProps } from './types';
 
 export function RunningWidget({ compact, today, totals, goals, entries, profile }: WidgetProps) {
   const log = useLogRun();
-  const [logging, setLogging] = useState(false);
 
   const days = weekDays(startOfWeek(today));
   const week = days.map((d) => totals.get(totalKey(d, 'running'))?.value ?? 0);
@@ -31,6 +28,29 @@ export function RunningWidget({ compact, today, totals, goals, entries, profile 
         </Link>
         <span className="wg-meta">this week</span>
       </div>
+
+      <QuickInput
+        label="Log run"
+        inputMode="text"
+        ariaLabel={`Distance in ${profile.distance_unit}, and optionally a time`}
+        placeholder={`5.1 ${profile.distance_unit} in 44:20`}
+        busy={log.isPending}
+        error={log.isError ? (log.error as Error).message : null}
+        onSubmit={(text) => {
+          // "5.1", "5.1 mi", "5.1 44:20", "5.1 in 1:02:10" — the distance first,
+          // a clock-style time anywhere after it.
+          const time = text.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+          const rest = time ? text.replace(time[0], ' ') : text;
+          const distance = Number(rest.replace(',', '.').match(/\d+(?:\.\d+)?/)?.[0]);
+          if (!Number.isFinite(distance) || distance <= 0) return `Type a distance, e.g. 5.1 or 5.1 in 44:20.`;
+          const seconds = time
+            ? time[3]
+              ? Number(time[1]) * 3600 + Number(time[2]) * 60 + Number(time[3])
+              : Number(time[1]) * 60 + Number(time[2])
+            : null;
+          log.mutate({ miles: distance, unit: profile.distance_unit, seconds });
+        }}
+      />
 
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <div className="big" style={compact ? { fontSize: 36 } : undefined}>
@@ -62,37 +82,6 @@ export function RunningWidget({ compact, today, totals, goals, entries, profile 
         </div>
       ) : null}
 
-      <LogButton label="Log run" compact={compact} onClick={() => setLogging(true)} />
-
-      {logging ? (
-        <ValueDialog
-          title="Log run"
-          submitLabel="Log"
-          busy={log.isPending}
-          fields={[
-            { name: 'distance', label: `Distance (${profile.distance_unit})`, placeholder: '5.1' },
-            { name: 'time', label: 'Time (mm:ss or h:mm:ss, optional)', placeholder: '44:20' },
-          ]}
-          onClose={() => setLogging(false)}
-          onSubmit={({ distance, time }) => {
-            const miles = Number(distance);
-            if (!Number.isFinite(miles) || miles <= 0) return;
-
-            const parts = time.split(':').map(Number).filter((n) => Number.isFinite(n));
-            const seconds =
-              parts.length === 3
-                ? parts[0] * 3600 + parts[1] * 60 + parts[2]
-                : parts.length === 2
-                  ? parts[0] * 60 + parts[1]
-                  : null;
-
-            log.mutate(
-              { miles, unit: profile.distance_unit, seconds },
-              { onSuccess: () => setLogging(false) },
-            );
-          }}
-        />
-      ) : null}
     </div>
   );
 }

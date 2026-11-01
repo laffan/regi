@@ -1,8 +1,6 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from '@/components/Icon';
-import { LogButton } from './LogButton';
-import { ValueDialog } from '@/components/ValueDialog';
+import { QuickInput } from './QuickInput';
 import { useLogPages } from '@/data/hooks';
 import { totalKey } from '@/components/WeekStrip';
 import { group } from '@/lib/format';
@@ -10,7 +8,6 @@ import type { WidgetProps } from './types';
 
 export function ReadingWidget({ compact, today, totals, goals, books }: WidgetProps) {
   const log = useLogPages();
-  const [logging, setLogging] = useState(false);
 
   const book = books.find((b) => b.status === 'reading') ?? null;
   const pagesToday = totals.get(totalKey(today, 'reading'))?.value ?? 0;
@@ -25,6 +22,20 @@ export function ReadingWidget({ compact, today, totals, goals, books }: WidgetPr
         <Icon name="book-open" />
         Reading
       </Link>
+
+      <QuickInput
+        label="Log pages"
+        inputMode="numeric"
+        ariaLabel={book ? `Pages read of ${book.title}` : 'Pages read'}
+        placeholder={book ? `pages of ${book.title}` : 'pages read'}
+        busy={log.isPending}
+        error={log.isError ? (log.error as Error).message : null}
+        onSubmit={(text) => {
+          const count = Number(text.replace(/[^\d.]/g, ''));
+          if (!Number.isFinite(count) || count <= 0) return 'Type how many pages, e.g. 24.';
+          log.mutate({ pages: Math.round(count), book });
+        }}
+      />
 
       {book ? (
         <>
@@ -63,28 +74,6 @@ export function ReadingWidget({ compact, today, totals, goals, books }: WidgetPr
         <span style={{ fontSize: 11.5, opacity: 0.6 }}>of {group(Number(dailyGoal))} pages today</span>
       </div>
 
-      <LogButton label="Log pages" compact={compact} onClick={() => setLogging(true)} />
-
-      {logging ? (
-        <ValueDialog
-          title="Log pages"
-          submitLabel="Log"
-          busy={log.isPending}
-          fields={[
-            { name: 'pages', label: book ? `Pages read of ${book.title}` : 'Pages read', placeholder: '24' },
-            { name: 'note', label: 'Note (optional)', placeholder: 'the chestnut section is the hinge' },
-          ]}
-          onClose={() => setLogging(false)}
-          onSubmit={({ pages, note }) => {
-            const count = Number(pages);
-            if (!Number.isFinite(count) || count <= 0) return;
-            log.mutate(
-              { pages: count, book, note: note || undefined },
-              { onSuccess: () => setLogging(false) },
-            );
-          }}
-        />
-      ) : null}
     </div>
   );
 }

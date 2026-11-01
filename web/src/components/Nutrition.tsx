@@ -1,8 +1,8 @@
 // The pieces every calorie surface shares: the tag saying where a number came
 // from, the macro bar, and the item editor used by review and by Edit.
 
-import { useState } from 'react';
-import { lookupFood } from '@/data/api';
+import { useRef, useState } from 'react';
+import { lookupFood, lookupFoodText } from '@/data/api';
 import { group } from '@/lib/format';
 import {
   MACROS,
@@ -118,6 +118,32 @@ export function MealItemsEditor({
 }) {
   const [looking, setLooking] = useState<number | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
+  const [addText, setAddText] = useState('');
+  const [adding, setAdding] = useState<string[]>([]);
+  // Lookups finish after the user may have edited other lines; append to
+  // what the list is then, not what it was when the lookup started.
+  const latest = useRef(items);
+  latest.current = items;
+
+  const addFromText = async () => {
+    const text = addText.trim();
+    if (!text) return;
+    setAddText('');
+    setLookupError(null);
+    setAdding((list) => [...list, text]);
+    try {
+      const found = await lookupFoodText(text);
+      if (!found.items.length) setLookupError(`No food recognised in “${text}”.`);
+      else onChange([...latest.current, ...found.items]);
+    } catch (err) {
+      setLookupError((err as Error).message);
+    } finally {
+      setAdding((list) => {
+        const i = list.indexOf(text);
+        return i < 0 ? list : [...list.slice(0, i), ...list.slice(i + 1)];
+      });
+    }
+  };
 
   const patch = (index: number, change: Partial<MealItem>, numeric = false) => {
     onChange(
@@ -213,18 +239,47 @@ export function MealItemsEditor({
           </div>
         </div>
       ))}
+      {/* A line being looked up shows where it will land. */}
+      {adding.map((text, i) => (
+        <div className="item-edit" key={`adding-${i}`} aria-busy="true">
+          <div style={{ fontSize: 12.5, opacity: 0.7 }}>Looking up “{text}”…</div>
+          <div className="skeleton" style={{ width: '70%' }} />
+        </div>
+      ))}
       {lookupError ? <div className="error">{lookupError}</div> : null}
       {allowAdd ? (
-        <button
-          type="button"
-          className="btn btn-ghost"
-          style={{ fontSize: 12, paddingLeft: 0 }}
-          onClick={() =>
-            onChange([...items, { name: '', portion: null, kcal: null, match_source: 'manual', match_ref: null }])
-          }
-        >
-          + Add item
-        </button>
+        <>
+          {/* The same reading the Log input gets, limited to food. */}
+          <form
+            className="qinput"
+            style={{ marginTop: 10 }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              void addFromText();
+            }}
+          >
+            <input
+              className="input"
+              aria-label="Add food to this meal"
+              placeholder="a slice of toast and butter"
+              value={addText}
+              onChange={(e) => setAddText(e.target.value)}
+            />
+            <button type="submit" className="btn btn-primary" disabled={!addText.trim()}>
+              Add Item
+            </button>
+          </form>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ fontSize: 12, paddingLeft: 0, marginTop: 4 }}
+            onClick={() =>
+              onChange([...items, { name: '', portion: null, kcal: null, match_source: 'manual', match_ref: null }])
+            }
+          >
+            + Manually Add Item
+          </button>
+        </>
       ) : null}
     </div>
   );
