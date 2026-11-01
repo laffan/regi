@@ -65,7 +65,7 @@ function SignedIn() {
   return (
     <div className="app">
       {behind ? (
-        <div className="error" role="alert" style={{ maxWidth: 1240, margin: '0 auto' }}>
+        <div className="error" role="alert" style={{ maxWidth: 'min(1240px, 90%)', margin: '0 auto' }}>
           <b>The database is behind this version of the app</b> (it reports {schema.data ?? 'no schema version'};
           expected {EXPECTED_SCHEMA}). Until it is migrated, approved food loses its macros and its sources' detail,
           and some settings will not save. From <code>app/</code>, run <code>supabase db push</code> — it applies

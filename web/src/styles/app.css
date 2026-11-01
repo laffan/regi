@@ -18,14 +18,15 @@
   background: var(--warm);
 }
 .sheet {
-  max-width: 1240px;
+  /* Never wider than 90% of the window, so small screens keep a margin. */
+  max-width: min(1240px, 90%);
   margin: 0 auto;
   background: var(--warm);
   border-left: 1px solid var(--line);
   border-right: 1px solid var(--line);
   min-height: 100vh;
 }
-.sheet-narrow { max-width: 860px; }
+.sheet-narrow { max-width: min(860px, 90%); }
 
 .wnav {
   display: flex;

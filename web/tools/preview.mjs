@@ -233,7 +233,11 @@ await new Promise((resolve) => server.listen(PORT, resolve));
 const browser = await chromium.launch(
   process.env.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } : {},
 );
-const context = await browser.newContext({ viewport: { width: 1320, height: 1100 }, deviceScaleFactor: 2 });
+// PREVIEW_WIDTH checks a narrower window, e.g. 800 for a small laptop or tablet.
+const context = await browser.newContext({
+  viewport: { width: Number(process.env.PREVIEW_WIDTH ?? 1320), height: 1100 },
+  deviceScaleFactor: 2,
+});
 
 // A session in storage, so the app renders signed in.
 await context.addInitScript(() => {
