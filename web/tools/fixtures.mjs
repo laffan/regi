@@ -229,18 +229,26 @@ export const goals = [
 ];
 
 export const draft = {
-  id: 'd1', raw_text: 'grilled chicken salad and an iced tea, read 18 pages',
+  id: 'd1', raw_text: 'about a cup of yogurt with a handful of granola, read 18 pages',
   status: 'pending', parser: 'openai', parse_error: null, created_at: iso(TODAY, '18:45'),
 };
 
 export const draftRows = [
   {
-    id: 'dr1', draft_id: 'd1', module_slug: 'calories', label: 'Grilled chicken salad, iced tea',
-    value: 522, unit: 'kcal', occurred_at: iso(TODAY, '18:45'),
+    // "about a cup of yogurt with a handful of granola": a measured cup and an
+    // estimated handful, each saying which it is.
+    id: 'dr1', draft_id: 'd1', module_slug: 'calories', label: 'Yogurt, granola',
+    value: 290, unit: 'kcal', occurred_at: iso(TODAY, '18:45'),
     payload: {
       items: [
-        { name: 'Grilled chicken salad', portion: null, kcal: 520, match_source: 'usda', match_ref: '171534', matched_name: 'Salad, grilled chicken', basis: 'no weight given — assumed 100 g at 520 kcal/100 g', protein_g: 38, carbs_g: 12, fat_g: 34, fiber_g: 4 },
-        { name: 'Iced tea, unsweetened', portion: null, kcal: 2, match_source: 'off', match_ref: '0074780', matched_name: 'Unsweetened iced tea', basis: '1 × 2 kcal per serving (500 ml)', protein_g: 0, carbs_g: 0.5, fat_g: 0, fiber_g: 0 },
+        { name: 'Yogurt', portion: 'about a cup', kcal: 149, match_source: 'usda', match_ref: '2342386',
+          matched_name: 'Yogurt, plain, whole milk', grams: 245, portion_source: 'database',
+          basis: 'about 1 × USDA “1 cup (8 fl oz)” (245 g) = 245 g × 61 kcal/100 g',
+          protein_g: 8.6, carbs_g: 11.5, fat_g: 8.1, fiber_g: 0 },
+        { name: 'Granola', portion: 'a handful', kcal: 141, match_source: 'usda', match_ref: '2343889',
+          matched_name: 'Granola, homemade', grams: 30, portion_source: 'estimate',
+          basis: '≈ 30 g for “a handful” (portion estimated by the parser) × 471 kcal/100 g',
+          protein_g: 4.1, carbs_g: 16.2, fat_g: 7.3, fiber_g: 2.6 },
       ],
     },
     match_note: 'USDA · 2 matches', position: 0,
@@ -321,7 +329,7 @@ export function sharedTotals() {
 export const dayClosures = [{ module_slug: 'calories', local_date: yesterday, closed_at: iso(yesterday, '20:30') }];
 
 // The schema the fixtures stand for; matches web/src/lib/schema.ts.
-export const SCHEMA_VERSION = '20261105000100';
+export const SCHEMA_VERSION = '20261106000100';
 
 // Per-day macros for the calendar's mini bars (the daily_macro_totals view).
 export function dailyMacros() {

@@ -49,7 +49,7 @@ export function CaloriesWidget({ compact, today, when, totals, entries, settings
         label="Log food"
         inputMode="text"
         ariaLabel="What did you eat?"
-        placeholder="turkey sandwich and an apple"
+        placeholder="half a banana and a red bull"
         voice
         onSubmit={(text) => {
           parse.mutate(when ? { text, now: when.occurred_at } : text);

@@ -13,8 +13,10 @@ supabase/
     food-lookup/         one food priced by every enabled source, with provenance;
                          or a phrase split into priced items (the meal editor's Add Item)
     transcribe/          voice logging: speech in, text out (nothing is saved)
-    _shared/             the client, the parsers, the food matching, OpenAI
+    _shared/             the client, the parsers, the food matching, OpenAI;
+                         portion.ts turns "about a cup" into grams, saying how
 scripts/
+  test-functions.mjs     runs the edge functions' *_test.ts under Node (or use deno test)
   validate-migrations.sh applies every migration to a throwaway Postgres
   smoke.sql              triggers, rollups, drafts and per-module sharing
 ```

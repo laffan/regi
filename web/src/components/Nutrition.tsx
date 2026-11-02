@@ -14,6 +14,7 @@ import {
   sourceLink,
   sourceSummary,
   sumMacros,
+  portionWeight,
   type MacroKey,
   type MacroTotals,
 } from '@/lib/nutrition';
@@ -33,6 +34,18 @@ export function SourceTag({ item, long }: { item: MealItem; long?: boolean }) {
   ) : (
     <span className={className} title={title}>
       {label}
+    </span>
+  );
+}
+
+/** The weight an item was priced for, and how it was reached — "≈ 30 g · estimated". */
+export function PortionTag({ item }: { item: MealItem }) {
+  const w = portionWeight(item);
+  if (!w) return null;
+  return (
+    <span className={w.sure ? 'src src-manual' : 'src src-openai'} title={item.basis ?? undefined}>
+      {w.text}
+      {w.note ? <span style={{ opacity: 0.7 }}> · {w.note}</span> : null}
     </span>
   );
 }
@@ -248,6 +261,7 @@ export function MealItemsEditor({
             ))}
           </div>
           <div className="item-src">
+            <PortionTag item={item} />
             <SourceTag item={item} long />
             {item.matched_name ? <span style={{ opacity: 0.7 }}>“{item.matched_name}”</span> : null}
             {item.basis ? <span style={{ opacity: 0.6 }}>{item.basis}</span> : null}

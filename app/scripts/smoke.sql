@@ -402,6 +402,26 @@ begin
 end
 $$;
 
+-- An item keeps the weight it was priced for, and where the weight came from.
+select public.log_meal('Yogurt and granola',
+  '[{"name":"Greek yogurt","portion":"about a cup","kcal":149,"match_source":"usda","match_ref":"1",
+     "grams":245,"portion_source":"database"},
+    {"name":"Granola","portion":"a handful","kcal":141,"match_source":"usda","match_ref":"2",
+     "grams":30,"portion_source":"estimate"},
+    {"name":"Oops","kcal":1,"portion_source":"guess"}]'::jsonb,
+  '2026-09-08T09:00:00Z');
+do $$
+begin
+  if (select items -> 0 ->> 'grams' from public.entry_feed where label = 'Yogurt and granola') <> '245'
+     or (select items -> 1 ->> 'portion_source' from public.entry_feed where label = 'Yogurt and granola') <> 'estimate' then
+    raise exception 'portion weight or source not kept';
+  end if;
+  if (select items -> 2 ->> 'portion_source' from public.entry_feed where label = 'Yogurt and granola') is not null then
+    raise exception 'an unknown portion source should be dropped, not stored';
+  end if;
+end
+$$;
+
 -- Closing a day.
 insert into public.day_closures (user_id, module_slug, local_date) values (auth.uid(), 'calories', '2026-09-08');
 

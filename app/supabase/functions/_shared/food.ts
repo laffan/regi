@@ -15,6 +15,7 @@
 
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { chatJSON, NUTRITION_MODEL, openAIKey } from './openai.ts';
+import { resolveGrams, type Measure, type PortionSource } from './portion.ts';
 
 export type FoodSource = 'usda' | 'off' | 'openai' | 'manual' | 'saved';
 export type LookupSource = 'usda' | 'off' | 'openai';
@@ -38,6 +39,10 @@ export interface FoodMatch {
   servingLabel: string | null;
   macrosPer100g: Macros;
   macrosPerServing: Macros;
+  /** Household portions with their weights: USDA's "1 cup = 245 g". */
+  measures: Measure[];
+  /** One serving as sold, in grams (ml for drinks). */
+  servingGrams: number | null;
 }
 
 export interface PricedItem extends Macros {
@@ -48,6 +53,10 @@ export interface PricedItem extends Macros {
   match_ref: string | null;
   matched_name: string | null;
   basis: string | null;
+  /** The weight the figures are for, when known. */
+  grams: number | null;
+  /** Where that weight came from: the text, a database portion, an estimate, or an assumption. */
+  portion_source: PortionSource | null;
 }
 
 const USER_AGENT = 'Regi/0.1 (habit tracker; contact via repo laffan/regi)';
@@ -89,40 +98,53 @@ const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 /**
  * Energy and macros for a portion of a match, and the sentence that explains
- * the arithmetic. The last case — no weight and no per-serving figure — is an
- * assumption, and the basis says so.
+ * the arithmetic. The weight comes from resolveGrams — stated, a database
+ * portion, an estimate — and only when there is none does a per-serving
+ * figure or an assumed 100 g stand in, each saying so.
  */
 export function priceFor(
   match: FoodMatch,
   portion: string | null,
-): { kcal: number | null; macros: Macros; basis: string | null } {
-  const grams = gramsIn(portion);
-  if (grams !== null && match.kcalPer100g !== null) {
+  detail: Omit<ItemIn, 'name' | 'portion'> = {},
+): { kcal: number | null; macros: Macros; basis: string | null; grams: number | null; portion_source: PortionSource | null } {
+  const sourceName = match.source === 'usda' ? 'USDA' : 'Open Food Facts';
+  const weight = resolveGrams(
+    { portion, quantity: detail.quantity, unit: detail.unit, grams_estimate: detail.grams_estimate, approximate: detail.approximate },
+    { measures: match.measures, servingGrams: match.servingGrams, sourceName },
+  );
+
+  if (weight && match.kcalPer100g !== null) {
     return {
-      kcal: Math.round((match.kcalPer100g * grams) / 100),
-      macros: scaleMacros(match.macrosPer100g, grams / 100),
-      basis: `${fmt(round1(grams))} g × ${fmt(match.kcalPer100g)} kcal/100 g`,
+      kcal: Math.round((match.kcalPer100g * weight.grams) / 100),
+      macros: scaleMacros(match.macrosPer100g, weight.grams / 100),
+      basis: `${weight.how} × ${fmt(match.kcalPer100g)} kcal/100 g`,
+      grams: round1(weight.grams),
+      portion_source: weight.source,
     };
   }
+
+  const count = detail.quantity ?? countIn(portion);
   if (match.kcalPerServing !== null) {
-    const count = countIn(portion);
     return {
       kcal: Math.round(match.kcalPerServing * count),
       macros: scaleMacros(match.macrosPerServing, count),
       basis: `${fmt(count)} × ${fmt(match.kcalPerServing)} kcal per serving${
         match.servingLabel ? ` (${match.servingLabel})` : ''
       }`,
+      grams: match.servingGrams ? round1(match.servingGrams * count) : null,
+      portion_source: 'database',
     };
   }
   if (match.kcalPer100g !== null) {
-    const count = countIn(portion);
     return {
       kcal: Math.round(match.kcalPer100g * count),
       macros: scaleMacros(match.macrosPer100g, count),
-      basis: `no weight given — assumed ${fmt(count * 100)} g at ${fmt(match.kcalPer100g)} kcal/100 g`,
+      basis: `no amount to go on — assumed ${fmt(count * 100)} g at ${fmt(match.kcalPer100g)} kcal/100 g`,
+      grams: count * 100,
+      portion_source: 'assumed',
     };
   }
-  return { kcal: null, macros: NO_MACROS, basis: null };
+  return { kcal: null, macros: NO_MACROS, basis: null, grams: null, portion_source: null };
 }
 
 /** Kept for callers that only want the number. */
@@ -144,9 +166,9 @@ async function cacheGet(db: SupabaseClient, query: string, source: 'usda' | 'off
     .limit(1)
     .maybeSingle();
 
-  // A cached row from before macros were recorded is re-fetched rather than
-  // served without them.
-  if (!data || !data.payload?.macros_per_100g) return null;
+  // A cached row from before macros and portions were recorded is re-fetched
+  // rather than served without them.
+  if (!data || data.payload?.v !== 2) return null;
   return {
     name: data.name,
     brand: data.brand,
@@ -157,6 +179,8 @@ async function cacheGet(db: SupabaseClient, query: string, source: 'usda' | 'off
     servingLabel: data.serving_label,
     macrosPer100g: data.payload.macros_per_100g ?? NO_MACROS,
     macrosPerServing: data.payload.macros_per_serving ?? NO_MACROS,
+    measures: data.payload.measures ?? [],
+    servingGrams: data.payload.serving_grams ?? null,
   };
 }
 
@@ -171,7 +195,13 @@ async function cachePut(db: SupabaseClient, query: string, match: FoodMatch): Pr
       kcal_per_100g: match.kcalPer100g,
       kcal_per_serving: match.kcalPerServing,
       serving_label: match.servingLabel,
-      payload: { macros_per_100g: match.macrosPer100g, macros_per_serving: match.macrosPerServing },
+      payload: {
+        v: 2,
+        macros_per_100g: match.macrosPer100g,
+        macros_per_serving: match.macrosPerServing,
+        measures: match.measures,
+        serving_grams: match.servingGrams,
+      },
       fetched_at: new Date().toISOString(),
     },
     { onConflict: 'source,ref,query' },
@@ -198,7 +228,13 @@ function usdaNutrient(food: Record<string, any>, [id, number]: readonly [number,
   return hit?.value != null ? Number(hit.value) : null;
 }
 
-export async function searchUsda(query: string): Promise<FoodMatch | null> {
+/**
+ * Generic foods are looked up in USDA's survey database (FNDDS) first — it
+ * carries household portions with weights ("1 cup = 245 g") — then Foundation
+ * and SR Legacy. A named brand goes to USDA's Branded Foods instead, so "Red
+ * Bull" does not come back as a generic energy drink, or the reverse.
+ */
+export async function searchUsda(query: string, branded = false): Promise<FoodMatch | null> {
   const key = Deno.env.get('USDA_FDC_API_KEY');
   if (!key) return null;
 
@@ -206,7 +242,7 @@ export async function searchUsda(query: string): Promise<FoodMatch | null> {
   url.searchParams.set('api_key', key);
   url.searchParams.set('query', query);
   url.searchParams.set('pageSize', '3');
-  url.searchParams.set('dataType', 'Foundation,SR Legacy,Branded');
+  url.searchParams.set('dataType', branded ? 'Branded' : 'Survey (FNDDS),Foundation,SR Legacy');
 
   const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
   if (!res.ok) return null;
@@ -238,13 +274,19 @@ export async function searchUsda(query: string): Promise<FoodMatch | null> {
     servingLabel: servingSize !== null ? `${servingSize} ${servingUnit}` : null,
     macrosPer100g: macros100,
     macrosPerServing: servingGrams !== null ? scaleMacros(macros100, servingGrams / 100) : NO_MACROS,
+    measures: ((food.foodMeasures ?? []) as Record<string, any>[])
+      .filter((m) => Number(m.gramWeight) > 0 && m.disseminationText)
+      .sort((a, b) => Number(a.rank ?? 0) - Number(b.rank ?? 0))
+      .map((m) => ({ text: String(m.disseminationText), grams: Number(m.gramWeight) })),
+    servingGrams,
   };
 }
 
 // ── Open Food Facts ─────────────────────────────────────────────────────────
 
 function offNumber(n: Record<string, unknown>, key: string): number | null {
-  return n[key] != null && n[key] !== '' ? Number(n[key]) : null;
+  const v = n[key] != null && n[key] !== '' ? Number(n[key]) : null;
+  return v !== null && Number.isFinite(v) ? v : null;
 }
 
 function offMatch(product: Record<string, any>): FoodMatch | null {
@@ -270,6 +312,10 @@ function offMatch(product: Record<string, any>): FoodMatch | null {
     servingLabel: product.serving_size ?? null,
     macrosPer100g: macros('100g'),
     macrosPerServing: macros('serving'),
+    measures: [],
+    // Grams, or millilitres for a drink — close enough to grams for pricing,
+    // and the basis names the serving it came from.
+    servingGrams: offNumber(product, 'serving_quantity'),
   };
 }
 
@@ -280,7 +326,7 @@ export async function searchOff(query: string): Promise<FoodMatch | null> {
   url.searchParams.set('action', 'process');
   url.searchParams.set('json', '1');
   url.searchParams.set('page_size', '3');
-  url.searchParams.set('fields', 'code,product_name,generic_name,brands,nutriments,serving_size');
+  url.searchParams.set('fields', 'code,product_name,generic_name,brands,nutriments,serving_size,serving_quantity');
 
   const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
   if (!res.ok) return null;
@@ -310,16 +356,19 @@ export async function findInDatabase(
   db: SupabaseClient,
   query: string,
   source: 'usda' | 'off',
+  branded = false,
 ): Promise<FoodMatch | null> {
   const cleaned = query.trim();
   if (!cleaned) return null;
+  // Branded and generic USDA searches answer differently; cache them apart.
+  const key = branded && source === 'usda' ? `${cleaned} #branded` : cleaned;
 
-  const cached = await cacheGet(db, cleaned, source);
+  const cached = await cacheGet(db, key, source);
   if (cached) return cached;
 
   try {
-    const match = source === 'usda' ? await searchUsda(cleaned) : await searchOff(cleaned);
-    if (match) await cachePut(db, cleaned, match);
+    const match = source === 'usda' ? await searchUsda(cleaned, branded) : await searchOff(cleaned);
+    if (match) await cachePut(db, key, match);
     return match;
   } catch (_err) {
     // A source being down is not a reason to fail the parse; the caller moves
@@ -387,12 +436,18 @@ const ESTIMATE_SCHEMA = {
  * food to be and the portion it assumed, so the review screen can show both.
  */
 export async function estimateWithOpenAI(
-  items: { name: string; portion: string | null }[],
+  items: ItemIn[],
 ): Promise<(Omit<PricedItem, 'name' | 'portion'> | null)[]> {
   if (!items.length || !openAIKey()) return items.map(() => null);
 
   const list = items
-    .map((item, index) => `${index}. ${item.name}${item.portion ? ` — portion: ${item.portion}` : ' — no portion given'}`)
+    .map((item, index) => {
+      const what = item.brand ? `${item.name} (brand: ${item.brand})` : item.name;
+      const amount = item.portion
+        ? `portion: ${item.portion}${item.grams_estimate ? ` (≈ ${item.grams_estimate} g)` : ''}`
+        : 'no portion given';
+      return `${index}. ${what} — ${amount}`;
+    })
     .join('\n');
 
   let parsed: { items: Estimate[] };
@@ -403,7 +458,7 @@ export async function estimateWithOpenAI(
       schema: ESTIMATE_SCHEMA,
       system: [
         'You estimate the energy and macronutrients of foods a person has eaten, for a calorie log that values accuracy and honesty over completeness.',
-        'Work from typical USDA FoodData Central values for the most likely interpretation of each food.',
+        'Work from typical USDA FoodData Central values for the most likely interpretation of each food. For a named brand, use that product\'s label values.',
         'Use the stated portion. If none is given, assume one typical serving and say exactly what you assumed.',
         'Carbohydrate is total carbohydrate, fibre included. Round kcal to the nearest whole number and grams to one decimal.',
         'If a food is too ambiguous to estimate responsibly, return null values rather than a guess.',
@@ -419,12 +474,15 @@ export async function estimateWithOpenAI(
     const est = parsed.items?.find((e) => e.index === index);
     if (!est || est.kcal == null || !Number.isFinite(Number(est.kcal))) return null;
     const num = (v: number | null) => (v == null || !Number.isFinite(Number(v)) ? null : round1(Number(v)));
+    const item = items[index];
     return {
       kcal: Math.round(Number(est.kcal)),
       match_source: 'openai' as const,
       match_ref: NUTRITION_MODEL,
       matched_name: est.interpreted_as || null,
       basis: `OpenAI estimate for ${est.assumed_portion || 'one serving'}`,
+      grams: item.grams_estimate ?? null,
+      portion_source: 'estimate' as const,
       protein_g: num(est.protein_g),
       carbs_g: num(est.carbs_g),
       fat_g: num(est.fat_g),
@@ -436,9 +494,35 @@ export async function estimateWithOpenAI(
 // ── the thing the functions actually call ───────────────────────────────────
 
 export interface ItemIn extends Partial<Macros> {
+  /** What it was, for the log: "Greek yogurt", "Red Bull". */
   name: string;
+  /** The amount as said: "about a cup", "half", "a tablespoon". */
   portion?: string | null;
   kcal?: number | null;
+  /** What to search the databases for, when it differs from the name: "yogurt, plain, whole milk". */
+  query?: string | null;
+  /** A named brand: "Red Bull", "Kellogg's". Brand-specific items are looked up as products. */
+  brand?: string | null;
+  quantity?: number | null;
+  unit?: string | null;
+  /** The parser's estimate of the whole portion's weight. */
+  grams_estimate?: number | null;
+  /** "about", "a handful", "a bowl": nobody weighed it. */
+  approximate?: boolean;
+}
+
+/** Brand-specific items go to the product databases first: Open Food Facts, then USDA Branded. */
+function orderFor(item: ItemIn, order: LookupSource[]): LookupSource[] {
+  if (!item.brand) return order;
+  const dbs = order.filter((s) => s !== 'openai');
+  const ranked = [...dbs.filter((s) => s === 'off'), ...dbs.filter((s) => s !== 'off')];
+  return order.map((s) => (s === 'openai' ? s : ranked.shift()!));
+}
+
+function searchText(item: ItemIn): string {
+  const base = (item.query ?? item.name).trim();
+  if (!item.brand) return base;
+  return base.toLowerCase().includes(item.brand.toLowerCase()) ? base : `${item.brand} ${base}`;
 }
 
 export async function priceItems(
@@ -457,6 +541,8 @@ export async function priceItems(
           match_ref: null,
           matched_name: null,
           basis: 'stated in the log',
+          grams: item.grams_estimate ?? null,
+          portion_source: null,
           protein_g: item.protein_g ?? null,
           carbs_g: item.carbs_g ?? null,
           fat_g: item.fat_g ?? null,
@@ -465,26 +551,26 @@ export async function priceItems(
       : null,
   );
 
-  // Walk the sources in the user's order; each step handles whatever is still
-  // unpriced, so OpenAI only ever sees what the databases ahead of it missed.
-  for (const source of order) {
-    const open = priced.map((p, i) => (p ? -1 : i)).filter((i) => i >= 0);
-    if (!open.length) break;
+  // Each item walks its own source order — a branded item tries the product
+  // databases first — and OpenAI is asked, once for all, only about what the
+  // sources ahead of it could not find.
+  const orders = items.map((item) => orderFor(item, order));
+  const steps = Math.max(...orders.map((o) => o.length), 0);
 
-    if (source === 'openai') {
-      const estimates = await estimateWithOpenAI(open.map((i) => ({ name: items[i].name, portion: items[i].portion ?? null })));
-      estimates.forEach((est, k) => {
-        if (!est) return;
-        const i = open[k];
-        priced[i] = { name: items[i].name, portion: items[i].portion ?? null, ...est };
-      });
-      continue;
-    }
+  for (let step = 0; step < steps; step++) {
+    const askAI: number[] = [];
 
-    for (const i of open) {
-      const match = await findInDatabase(db, items[i].name, source);
+    for (let i = 0; i < items.length; i++) {
+      if (priced[i]) continue;
+      const source = orders[i][step];
+      if (!source) continue;
+      if (source === 'openai') {
+        askAI.push(i);
+        continue;
+      }
+      const match = await findInDatabase(db, searchText(items[i]), source, Boolean(items[i].brand));
       if (!match) continue;
-      const price = priceFor(match, items[i].portion ?? null);
+      const price = priceFor(match, items[i].portion ?? null, items[i]);
       if (price.kcal === null) continue;
       priced[i] = {
         name: items[i].name,
@@ -494,8 +580,19 @@ export async function priceItems(
         match_ref: match.ref,
         matched_name: match.brand ? `${match.name} (${match.brand})` : match.name,
         basis: price.basis,
+        grams: price.grams,
+        portion_source: price.portion_source,
         ...price.macros,
       };
+    }
+
+    if (askAI.length) {
+      const estimates = await estimateWithOpenAI(askAI.map((i) => items[i]));
+      estimates.forEach((est, k) => {
+        if (!est) return;
+        const i = askAI[k];
+        priced[i] = { name: items[i].name, portion: items[i].portion ?? null, ...est };
+      });
     }
   }
 
@@ -509,6 +606,8 @@ export async function priceItems(
         match_ref: null,
         matched_name: null,
         basis: null,
+        grams: items[i].grams_estimate ?? null,
+        portion_source: items[i].grams_estimate ? 'estimate' : null,
         ...NO_MACROS,
       },
   );

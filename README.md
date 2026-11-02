@@ -116,6 +116,15 @@ not configured.
   labelled "OpenAI estimate", with the portion it assumed), and transcribes
   voice logging (`gpt-transcribe` by default). A transcript lands in the input
   line for review; it is never parsed or saved without you.
+- **Amounts as people say them.** "About a cup of yogurt with a handful of
+  granola", "half a banana, a bowl of corn flakes and a red bull": the parser
+  splits the foods, reads each amount (quantity, unit, whether it was
+  approximate), recognises named products, and gives a gram estimate. Pricing
+  then prefers measured data — the text's own weight, then USDA's household
+  portions ("1 cup = 245 g") or a product's serving ("1 can = 250 ml") — and
+  uses the estimate only where there is none. Every item stores its weight and
+  whether that weight was stated, measured, estimated or assumed. Branded items
+  are looked up as products (Open Food Facts, then USDA Branded Foods).
 - **USDA FoodData Central** and **Open Food Facts** price food, energy and
   macros. The order of the three sources, and whether OpenAI is asked at all,
   is a Calories setting; barcodes always resolve through Open Food Facts.

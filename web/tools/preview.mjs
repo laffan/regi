@@ -164,7 +164,9 @@ const scenarios = [
     path: '/',
     active: ['weight', 'calories', 'reading'],
     run: async (page) => {
-      await page.locator('.wk > button').nth(2).click();
+      // Any earlier day this week; on a Monday there is none to pick.
+      const earlier = page.locator('.wk > button:not([disabled]):not(.today)');
+      if (await earlier.count()) await earlier.first().click();
       await page.locator('.chip-group').first().hover();
     },
   },

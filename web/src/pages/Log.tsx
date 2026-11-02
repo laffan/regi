@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Icon } from '@/components/Icon';
 import { EntryEditDialog } from '@/components/EntryEditDialog';
-import { MacroBar, MacroLine, MealItemsEditor, SourceSummary, SourceTag } from '@/components/Nutrition';
+import { MacroBar, MacroLine, MealItemsEditor, PortionTag, SourceSummary, SourceTag } from '@/components/Nutrition';
 import { VoiceButton } from '@/components/VoiceButton';
 import {
   useApproveDraft,
@@ -110,7 +110,7 @@ export function LogPage() {
               className="input"
               style={{ minHeight: 44 }}
               value={text}
-              placeholder="grilled chicken salad and an iced tea, read 18 pages"
+              placeholder="about a cup of yogurt with a handful of granola, read 18 pages"
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') submit();
@@ -599,6 +599,7 @@ function EntrySummary({ entry, onEdit, onClose }: { entry: Entry; onEdit: () => 
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, fontSize: 11.5 }}>
                     {item.portion ? <span style={{ opacity: 0.7 }}>{item.portion}</span> : null}
+                    <PortionTag item={item} />
                     <SourceTag item={item} long />
                     {item.matched_name ? <span style={{ opacity: 0.6 }}>“{item.matched_name}”</span> : null}
                   </div>

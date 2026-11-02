@@ -1,4 +1,5 @@
 import { chatJSON, PARSE_MODEL } from './openai.ts';
+import { parsePortion } from './portion.ts';
 
 // One line of text in, typed draft rows out.
 //
@@ -19,9 +20,21 @@ export interface ParseContext {
 }
 
 export interface ParsedItem {
+  /** As the person would say it, brand included: "Greek yogurt", "Red Bull". */
   name: string;
+  /** The amount in their words: "about a cup", "half", "a tablespoon". */
   portion: string | null;
   kcal: number | null;
+  /** A plain database description, when it differs from the name. */
+  query?: string | null;
+  /** A named product's brand, so it is looked up as that product. */
+  brand?: string | null;
+  quantity?: number | null;
+  unit?: string | null;
+  /** The parser's estimate of the whole portion's weight, in grams. */
+  grams_estimate?: number | null;
+  /** An amount nobody weighed: "about", "some", a handful, a bowl. */
+  approximate?: boolean;
 }
 
 export interface ParsedRow {
@@ -101,28 +114,53 @@ function timeIn(text: string, now: Date): { at: string | null; rest: string } {
   return { at: null, rest: text };
 }
 
-function foodItems(text: string): ParsedItem[] {
-  return text
-    .split(/,| and | with | plus |\+/i)
-    .map((chunk) =>
-      chunk
-        .replace(/\b(?:i|had|have|ate|for|the|some|my|a|an|then|also|just)\b/gi, ' ')
-        .replace(/\s+/g, ' ')
-        .trim(),
-    )
-    .filter((chunk) => chunk.length > 1 && !FILLER.test(chunk))
-    .map((chunk) => {
-      // "80 g oats" and "oats 80 g" both carry their portion with them.
-      const lead = chunk.match(/^(\d+(?:\.\d+)?\s*(?:g|kg|ml|l|oz|cups?|slices?|pieces?|medium|large|small)\b)\s+(.*)$/i);
-      const trail = chunk.match(/^(.*?)\s+(\d+(?:\.\d+)?\s*(?:g|kg|ml|l|oz|cups?|slices?|pieces?)\b)$/i);
-      const count = chunk.match(/^(\d+)\s+(.*)$/);
+const LEAD_VERBS =
+  /^(?:(?:and|then|also|plus)\s+)?(?:i\s+)?(?:just\s+)?(?:ate|had|have|drank|drink|eat|got|grabbed|finished|snacked on)\s+/i;
 
-      if (lead) return { name: titleCase(lead[2]), portion: lead[1].trim(), kcal: null };
-      if (trail) return { name: titleCase(trail[1]), portion: trail[2].trim(), kcal: null };
-      if (count) return { name: titleCase(count[2]), portion: count[1], kcal: null };
-      return { name: titleCase(chunk), portion: null, kcal: null };
-    })
-    .slice(0, 8);
+/**
+ * The rule-based reading of food, for when no model is configured: split on
+ * commas, "and", "with"; take the amount off the front of each piece ("about a
+ * cup of", "half a", "a tablespoon of"); what is left is the food.
+ */
+function foodItems(text: string): ParsedItem[] {
+  const items: ParsedItem[] = [];
+  for (const raw of text.split(/,|;|\band\b|\bwith\b|\bplus\b|\s\+\s|&/i)) {
+    let chunk = raw
+      .replace(/[.!?]+$/, '')
+      .trim()
+      .replace(/^(?:for (?:breakfast|lunch|dinner|a snack)\s*,?\s*)/i, '')
+      .replace(LEAD_VERBS, '')
+      .trim();
+    if (chunk.length < 2 || FILLER.test(chunk)) continue;
+
+    // "oats 80 g": a trailing weight moves to the front.
+    const trail = chunk.match(/^(.*?)\s+(\d+(?:\.\d+)?\s*(?:g|kg|ml|l|oz)\b)$/i);
+    if (trail) chunk = `${trail[2]} ${trail[1]}`;
+
+    const p = parsePortion(chunk);
+    const name = p.rest
+      .replace(/\b(?:the|my|some)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!name || FILLER.test(name)) continue;
+
+    const said = chunk.slice(0, chunk.length - p.rest.length).trim();
+    const portion = said.replace(/\s+(?:of|an?)$/i, '').trim() || null;
+
+    items.push({
+      name: titleCase(name),
+      portion,
+      kcal: null,
+      query: null,
+      brand: null,
+      quantity: p.quantity,
+      unit: p.unit,
+      grams_estimate: null,
+      approximate: p.approximate,
+    });
+    if (items.length >= 8) break;
+  }
+  return items;
 }
 
 export function fallbackParse(raw: string, ctx: ParseContext): ParsedRow[] {
@@ -323,10 +361,19 @@ function schemaFor(modules: string[]) {
               items: {
                 type: 'object',
                 additionalProperties: false,
-                required: ['name', 'portion', 'kcal'],
+                required: ['name', 'brand', 'query', 'portion', 'quantity', 'unit', 'approximate', 'grams_estimate', 'kcal'],
                 properties: {
-                  name: { type: 'string' },
-                  portion: { type: ['string', 'null'] },
+                  name: { type: 'string', description: 'The food as the person would say it, brand included: "Greek yogurt", "Red Bull".' },
+                  brand: { type: ['string', 'null'], description: 'Only for a named or unmistakable product ("red bull" → "Red Bull"); otherwise null.' },
+                  query: { type: 'string', description: 'A plain description to search a nutrition database: "yogurt, plain, whole milk", "chocolate syrup", "energy drink".' },
+                  portion: { type: ['string', 'null'], description: 'The amount in the person\'s words: "about a cup", "half", "a tablespoon", "a bowl".' },
+                  quantity: { type: ['number', 'null'], description: 'How many of the unit: half → 0.5, a/an → 1, two → 2.' },
+                  unit: {
+                    type: ['string', 'null'],
+                    description: 'cup, tbsp, tsp, g, ml, oz, fl oz, slice, piece, bowl, handful, scoop, glass, mug, can, bottle, bar, packet, serving — or null for a count of whole items ("a banana").',
+                  },
+                  approximate: { type: 'boolean', description: 'True when the amount was not measured: "about", "some", a handful, a bowl.' },
+                  grams_estimate: { type: ['number', 'null'], description: 'Your best estimate of the weight in grams of the whole portion as eaten.' },
                   kcal: { type: ['number', 'null'] },
                 },
               },
@@ -355,7 +402,10 @@ function systemPrompt(ctx: ParseContext): string {
     'You turn one line of a habit-tracking log into structured rows.',
     `Active modules, and the only ones you may use: ${ctx.activeModules.join(', ')}.`,
     'Emit a row only for what the text actually says. Do not invent a row for every module.',
-    'Split food into individual items. Never guess a calorie count: leave kcal null unless the text gives a number — the server prices items against USDA FoodData Central and Open Food Facts afterwards.',
+    'Split food into individual items: "a bowl of ice cream with a tablespoon of chocolate sauce" is two items. Do not add foods that were not said (no milk with cereal unless mentioned).',
+    'Never guess a calorie count: leave kcal null unless the text gives a number — the server prices items against USDA FoodData Central and Open Food Facts afterwards.',
+    'For each food, record the amount exactly as said (portion), as a number and unit (quantity, unit), whether it was approximate, and your best estimate of its weight in grams (grams_estimate) — always give one. Typical weights: a cup of yogurt ≈ 245 g, a handful of granola ≈ 30 g, a bowl of ice cream ≈ 130 g, a tablespoon of chocolate sauce ≈ 20 g, half a banana ≈ 60 g, a bowl of corn flakes ≈ 30 g dry, a can of Red Bull ≈ 250 ml.',
+    'Mark a brand only when the person names a product or a product name is unmistakable ("a red bull" → brand "Red Bull", query "energy drink"); "corn flakes" alone is generic.',
     ctx.activities?.length
       ? `Yes/no trackers the user made, by module id: ${ctx.activities
           .map((a) => `${a.slug} = "${a.name}"`)
@@ -401,11 +451,20 @@ export async function parseWithOpenAI(raw: string, ctx: ParseContext): Promise<P
         occurred_at: occurredAt,
         note: row.note ?? null,
         items: Array.isArray(row.items)
-          ? row.items.map((i: Record<string, any>) => ({
-              name: String(i.name ?? ''),
-              portion: i.portion ?? null,
-              kcal: i.kcal == null ? null : Number(i.kcal),
-            }))
+          ? row.items.map((i: Record<string, any>) => {
+              const num = (v: unknown) => (v == null || !Number.isFinite(Number(v)) ? null : Number(v));
+              return {
+                name: String(i.name ?? ''),
+                portion: i.portion ?? null,
+                kcal: num(i.kcal),
+                query: i.query ? String(i.query) : null,
+                brand: i.brand ? String(i.brand) : null,
+                quantity: num(i.quantity),
+                unit: i.unit ? String(i.unit) : null,
+                grams_estimate: num(i.grams_estimate),
+                approximate: Boolean(i.approximate),
+              };
+            })
           : [],
         end_page: row.end_page == null ? null : Number(row.end_page),
         book_id: isReading ? ctx.currentBook?.id ?? null : null,

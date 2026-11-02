@@ -31,6 +31,7 @@ import {
 import { buildSeriesIndex } from '@/data/series';
 import { addDays, rangeOfDays, timeOfDay, today as todayISO } from '@/lib/dates';
 import { group, moduleValue } from '@/lib/format';
+import { portionWeight } from '@/lib/nutrition';
 import { mean, movingMean } from '@/lib/projection';
 import { readGoal } from '@/modules/goals';
 import { CROSSTALK, moduleDef, publisherOf, subscribersOf } from '@/modules/registry';
@@ -208,7 +209,14 @@ export function ModuleDetail() {
                               </div>
                             ) : null}
                           </td>
-                          <td>{item.portion ?? '—'}</td>
+                          <td>
+                            {item.portion ?? '—'}
+                            {portionWeight(item) ? (
+                              <div style={{ fontSize: 11, opacity: 0.6 }}>
+                                {portionWeight(item)!.text} · {portionWeight(item)!.note}
+                              </div>
+                            ) : null}
+                          </td>
                           <td>
                             {item.kcal == null ? (
                               <span className="tag tag-outline">No match — set by hand</span>

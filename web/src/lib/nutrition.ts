@@ -87,6 +87,25 @@ export function provenance(item: MealItem): string {
   return parts.join(' · ');
 }
 
+const PORTION_NOTE: Record<string, string> = {
+  stated: 'as stated',
+  database: 'measured portion',
+  estimate: 'estimated',
+  assumed: 'assumed',
+};
+
+/** "245 g · measured portion", "≈ 30 g · estimated" — the weight and how sure it is. */
+export function portionWeight(item: Pick<MealItem, 'grams' | 'portion_source'>): { text: string; note: string; sure: boolean } | null {
+  if (item.grams == null) return null;
+  const sure = item.portion_source === 'stated' || item.portion_source === 'database';
+  const g = item.grams >= 10 ? Math.round(item.grams) : Math.round(item.grams * 10) / 10;
+  return {
+    text: `${sure ? '' : '≈ '}${g} g`,
+    note: PORTION_NOTE[item.portion_source ?? ''] ?? '',
+    sure,
+  };
+}
+
 /** "USDA ×2 · OFF ×1" — a meal's sources at a glance. */
 export function sourceSummary(items: MealItem[]): { source: FoodSource; count: number }[] {
   const counts = new Map<FoodSource, number>();

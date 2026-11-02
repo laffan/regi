@@ -66,7 +66,14 @@ export interface MealItem extends Partial<Macros> {
   matched_name?: string | null;
   /** How kcal was reached, e.g. "80 g × 380 kcal/100 g". Null when set by hand. */
   basis?: string | null;
+  /** The weight (ml for drinks) the figures are for. */
+  grams?: number | null;
+  /** Where that weight came from. */
+  portion_source?: PortionSource | null;
 }
+
+/** stated: in the text · database: a USDA/OFF portion · estimate: the parser's or typical · assumed: 100 g. */
+export type PortionSource = 'stated' | 'database' | 'estimate' | 'assumed';
 
 export interface Entry {
   id: string;

@@ -95,6 +95,8 @@ Deno.serve(async (req) => {
       match_ref: match.ref,
       matched_name: match.brand ? `${match.name} (${match.brand})` : match.name,
       basis: price.basis,
+      grams: price.grams,
+      portion_source: price.portion_source,
       ...price.macros,
     };
     return json({ item, alternates: [], note: 'Open Food Facts' });
@@ -130,6 +132,8 @@ Deno.serve(async (req) => {
       match_ref: match.ref,
       matched_name: match.brand ? `${match.name} (${match.brand})` : match.name,
       basis: price.basis,
+      grams: price.grams,
+      portion_source: price.portion_source,
       ...price.macros,
     });
   }
